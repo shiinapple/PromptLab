@@ -20,8 +20,14 @@
 | [ROADMAP](docs/ROADMAP.md) | 里程碑、依赖、发布门槛 |
 | [TASKS](docs/tasks/README.md) | 首批任务与完成标准 |
 | [REFERENCES](docs/REFERENCES.md) | 原稿引用与复用边界 |
-| [原始方案](docs/archive/DESIGN-v0.2.md) | 原文归档，不作为日常编辑目标 |
 | [AGENTS](AGENTS.md) | 开发 Agent 工作约束 |
 | [NEXT_CODEX](docs/NEXT_CODEX.md) | 可复制的下一条执行指令 |
 
 先确认 DECISIONS 与 REVIEW 中阻塞项，再按 ROADMAP 执行 PoC。原稿中的设计示例、候选依赖及未验证兼容性不能视为完成。工作目录已有 README 或 AGENTS 时应人工合并，不直接覆盖。
+
+## 设计归档
+
+| 版本 | 内容 |
+|---|---|
+| [v0.2](docs/archive/DESIGN-v0.2.md) | 浏览器直连与 D0 手动运行的修订合稿 |
+| [v0.1](docs/archive/DESIGN-v0.1.md) | 最初的产品与技术方案评审稿 |
