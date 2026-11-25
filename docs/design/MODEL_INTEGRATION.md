@@ -2,7 +2,7 @@
 
 > 来源：原方案 v0.2 第 2 节。拆分保留原意；示例不是已经实现或验证的功能。
 
-本文件是 P0/P1/P2 模型接入的权威设计。验证方法见 [TESTING](TESTING.md)。
+本文件是 P0/P1/P2 模型接入的权威设计。验证方法见 [TESTING](../TESTING.md)。
 
 | 优先级 | 接入方式 | 定位 |
 |---|---|---|
@@ -60,105 +60,10 @@ D0 不要求网站知道 Base URL 或 API Key。每次只导出一个用例，�
 
 **响应导入**。浏览器先限制文件/粘贴长度，再本地读取 JSON，检查外壳、错误对象、choices、第一条 message 及 finish_reason。只接受正常结束且 choices[0].message.content 为非空字符串的响应。拒绝空白、错误返回、截断、工具调用和不支持的结束状态；不导入完整 HTTP 日志。粘贴方式由用户确认正文完整，提醒聊天客户端可能额外添加系统提示。两种方式都保留原文，不 trim、不去围栏、不修复 JSON、不改标点，仅将快照关联及判题所需数据提交平台。
 
-### macOS / Linux Bash
-
-在保存请求 JSON 的目录启动 Bash，核对文件名、替换 Model ID 和 Base URL。以下示例针对无鉴权网关，需鉴权时在提示处输入；使用 curl 7.76.0 或更新版本（--fail-with-body）。每次在当前目录创建独有的结果目录，只有 curl 成功且 HTTP 为 2xx 才生成 response.json。
-
-```bash
-(
-  set +x
-  set -o pipefail
-  base='http://127.0.0.1:11434/v1'
-  request='request.json'
-  [[ -r "$request" ]] || { printf 'Request file missing\n' >&2; exit 1; }
-  run_dir=$(mktemp -d ./promptlab-run.XXXXXXXX) || exit 1
-  trap 'rm -f -- "$run_dir/body.tmp"' EXIT
-
-  unset key
-  IFS= read -r -s -p 'API Key (Enter for no auth): ' key || exit 1
-  [[ $key != *$'\r'* ]] || { printf 'Invalid API Key characters\n' >&2; exit 1; }
-  printf '\n'
-  args=(--fail-with-body --silent --show-error --connect-timeout 5
-        --max-time 180 --max-filesize 1048576
-        -H 'Content-Type: application/json' --data-binary "@$request"
-        -o "$run_dir/body.tmp" -w '%{http_code}')
-  if [[ -n "$key" ]]; then
-    status=$(printf 'Authorization: Bearer %s\n' "$key" |
-      curl -q -H @- "${args[@]}" "${base%/}/chat/completions")
-    code=$?
-  else
-    status=$(curl -q "${args[@]}" "${base%/}/chat/completions")
-    code=$?
-  fi
-  unset key
-  if [[ "$code" -ne 0 || "$status" != 2[0-9][0-9] ]]; then
-    printf 'Request failed (curl %s, HTTP %s)\n' "$code" "$status" >&2
-    exit 1
-  fi
-  mv -- "$run_dir/body.tmp" "$run_dir/response.json" || exit 1
-  printf 'Import this file: %s/response.json\n' "$run_dir"
-)
-```
-
-无鉴权时可直接回车，脚本只发 Content-Type 请求头。只用无鉴权网关时，可删除从 unset key 到 printf 换行的输入部分，再用以下两行替换 if/else 鉴权分支以及其后的 unset key。保留 args 数组和文件、HTTP 状态检查。
-
-```bash
-status=$(curl -q "${args[@]}" "${base%/}/chat/completions")
-code=$?
-```
-
-### Windows PowerShell
-
-在 PowerShell 中进入请求文件目录，替换文件名、Model ID 和 Base URL。使用 curl.exe 7.76.0 或更新版本，避免 PowerShell 的 curl 别名。用隐蔽输入读取 Key，通过 stdin 送入请求头；无鉴权直接回车。
-
-```powershell
-& {
-    $base = 'http://127.0.0.1:11434/v1'
-    $request = 'request.json'
-    if (-not (Test-Path -LiteralPath $request -PathType Leaf)) {
-        throw 'Request file missing'
-    }
-    $runDir = Join-Path (Get-Location).Path ('promptlab-run-' + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $runDir -ErrorAction Stop | Out-Null
-    $tempFile = Join-Path $runDir 'body.tmp'
-    $response = Join-Path $runDir 'response.json'
-    $curlArgs = @('--fail-with-body', '--silent', '--show-error',
-                  '--connect-timeout', '5', '--max-time', '180',
-                  '--max-filesize', '1048576', '-H', 'Content-Type: application/json',
-                  '--data-binary', "@$request", '-o', $tempFile, '-w', '%{http_code}',
-                  ($base.TrimEnd('/') + '/chat/completions'))
-    $secret = Read-Host 'API Key (Enter for no auth)' -AsSecureString
-    try {
-        if ($secret.Length -eq 0) {
-            $status = & curl.exe -q @curlArgs
-        } else {
-            $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
-            try {
-                $key = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
-                if ($key -notmatch '^[\x21-\x7E]+$') { throw 'Invalid API Key characters' }
-                $status = "Authorization: Bearer $key" | & curl.exe -q -H '@-' @curlArgs
-            } finally {
-                Remove-Variable key -ErrorAction SilentlyContinue
-                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
-            }
-        }
-        $code = $LASTEXITCODE
-        if ($code -ne 0 -or $status -notmatch '^2[0-9][0-9]$') {
-            throw "Request failed (curl $code, HTTP $status)"
-        }
-        Move-Item -LiteralPath $tempFile -Destination $response -ErrorAction Stop
-        "Import this file: $response"
-    } finally {
-        if ($null -ne $secret) { $secret.Dispose() }
-        if (Test-Path -LiteralPath $tempFile) { Remove-Item -LiteralPath $tempFile }
-    }
-}
-```
-
-只用无鉴权网关时，可直接将密钥读取和 try 内的鉴权分支改为调用 `$status = & curl.exe -q @curlArgs`，并删除 finally 中清理 `$secret` 的一行，保留状态检查及临时文件清理。两个示例都把 -q 放在首个参数位置，保持 TLS 校验，不跟随重定向。2xx 仍需经过网站的响应正文检查，只有本次打印的文件可导入。请求与响应可能含私人信息，按需清理，避免分享。curl 的大小限制随版本存在差异，浏览器导入仍独立执行字节上限。其他平台与工具需用[验证矩阵](TESTING.md)验证。 [curl 官方参数说明](https://curl.se/docs/manpage.html#--fail-with-body)
+命令示例见 [D0 CLI 指南](../guides/D0_CLI.md)，包含 macOS/Linux Bash 和 Windows PowerShell。
 
 ## 2.3 P1 独立安全代理
 
-候选链路为 Vue → Spring Boot → OkHttp → Smokescreen → 公网模型 API。Smokescreen 是 HTTP CONNECT 出站代理候选。公开源码中的 safeResolve/dialContext 体现了解析地址校验和建连路径的关联，最终行为以锁定版本验证为准。Spring Boot 控制业务接口、鉴权、请求格式和限流；候选选型须经[验证计划](TESTING.md)。只有用户显式选择并授权时，平台才接收本次调用的 API Key；不持久化、不记录，直连失败时不得自动转交。该路径限公网 API。
+候选链路为 Vue → Spring Boot → OkHttp → Smokescreen → 公网模型 API。Smokescreen 是 HTTP CONNECT 出站代理候选。公开源码中的 safeResolve/dialContext 体现了解析地址校验和建连路径的关联，最终行为以锁定版本验证为准。Spring Boot 控制业务接口、鉴权、请求格式和限流；候选选型须经[验证计划](../TESTING.md)。只有用户显式选择并授权时，平台才接收本次调用的 API Key；不持久化、不记录，直连失败时不得自动转交。该路径限公网 API。
 
 正式设计需验证 SSRF 防护、DNS 重绑定防护、实际连接 IP 与校验结果一致、IPv4/IPv6 及特殊用途地址过滤、云元数据与服务器自身地址拦截、拒绝重定向、TLS 证书和主机名验证。使用 nftables、systemd 或已验证的 OS 级网络隔离防止应用直连绕过，代理不可用时默认拒绝。还需验证请求并发、速率、超时、响应大小、跨用户隔离、Key 脱敏、SSE 与取消传播。Smokescreen 的维护、安全策略、实际内存及隔离能力通过验证后才可定型。 [Smokescreen 源码](https://github.com/stripe/smokescreen/blob/master/pkg/smokescreen/smokescreen.go) · [OWASP SSRF 指南](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)

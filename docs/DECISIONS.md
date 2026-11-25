@@ -49,7 +49,7 @@ Java 21 发行版、受支持 Spring Boot 版本、SQLite JDBC、Spring JDBC/Jdb
 
 | 日期 | ID | 旧值 | 新值 | 依据与验证 | 受影响文档 |
 |---|---|---|---|---|---|
-| 2026-11-25 | D09 / Q01 | 建议优先用真实站点 | 本机 Mock → 真实 HTTPS；具体目标待确认 | 所有者确认；[POC-01](TESTING.md#poc-01浏览器直连最高优先级) | TESTING、ROADMAP |
+| 2026-11-25 | D09 / Q01 | 建议优先用真实站点 | 本机 Mock → 真实 HTTPS；具体目标待确认 | 所有者确认；[POC-01](validation/POC-01.md) | TESTING、ROADMAP |
 | 2026-11-25 | Q02 | 首版账户方式待确认 | 预建账户、邀请内测 | 所有者确认 | PRODUCT、ARCHITECTURE、ROADMAP |
 | 2026-11-25 | D10 / R14 | 三类样题同列 MVP 验收 | 文字题先发布、视觉题单独验证 | 所有者确认 | PRODUCT、TESTING、ROADMAP |
 | 2026-11-25 | Q05 | 待核对旧项目复用 | 完全新建 | 所有者确认 | ARCHITECTURE、ROADMAP、M0 |

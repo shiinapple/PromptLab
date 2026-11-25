@@ -13,20 +13,20 @@
 | 发布范围 | 文字题 001/002 先发布，视觉题 003 经独立验证后发布 |
 | 旧项目代码 | 完全新建。正式界面的 Design Token 另行核对 |
 
-完整记录见 [DECISIONS](../DECISIONS.md)。
+完整记录见 [DECISIONS](../../DECISIONS.md)。
 
 ## 实现与产物
 
 | 文件 | 做了什么 |
 |---|---|
-| [index.html](../../poc/browser-direct/index.html) | 提供本机实验页，可运行用例并查看结果 |
-| [transport.mjs](../../poc/browser-direct/transport.mjs) | 基于 Fetch 和 AbortController 请求模型列表、普通响应和 SSE。保留原始模型正文，限制响应大小及运行时间，拒绝重定向 |
-| [mock.mjs](../../poc/browser-direct/mock.mjs) | 提供受控模型响应、CORS 策略及故障场景，记录预检、实际请求与连接断开，用虚构 Key 检查鉴权头 |
-| [cases.mjs](../../poc/browser-direct/cases.mjs) · [harness.mjs](../../poc/browser-direct/harness.mjs) | 定义 34 个浏览器用例，启动两个仅绑定本机的随机端口及临时 Chrome 配置，汇总通过数和退出码 |
-| [package.json](../../poc/browser-direct/package.json) · [package-lock.json](../../poc/browser-direct/package-lock.json) · [.gitignore](../../poc/browser-direct/.gitignore) | 提供启动和测试命令，锁定 PoC 的 SSE 解析依赖 eventsource-parser 3.0.8（MIT），将本地依赖目录设为 Git 忽略项 |
-| [PoC 运行说明](../../poc/browser-direct/README.md) | 记录自动和手动复跑方式、依赖要求和暂定协议规则 |
+| [index.html](../../../poc/browser-direct/index.html) | 提供本机实验页，可运行用例并查看结果 |
+| [transport.mjs](../../../poc/browser-direct/transport.mjs) | 基于 Fetch 和 AbortController 请求模型列表、普通响应和 SSE。保留原始模型正文，限制响应大小及运行时间，拒绝重定向 |
+| [mock.mjs](../../../poc/browser-direct/mock.mjs) | 提供受控模型响应、CORS 策略及故障场景，记录预检、实际请求与连接断开，用虚构 Key 检查鉴权头 |
+| [cases.mjs](../../../poc/browser-direct/cases.mjs) · [harness.mjs](../../../poc/browser-direct/harness.mjs) | 定义 34 个浏览器用例，启动两个仅绑定本机的随机端口及临时 Chrome 配置，汇总通过数和退出码 |
+| [package.json](../../../poc/browser-direct/package.json) · [package-lock.json](../../../poc/browser-direct/package-lock.json) · [.gitignore](../../../poc/browser-direct/.gitignore) | 提供启动和测试命令，锁定 PoC 的 SSE 解析依赖 eventsource-parser 3.0.8（MIT），将本地依赖目录设为 Git 忽略项 |
+| [PoC 运行说明](../../../poc/browser-direct/README.md) | 记录自动和手动复跑方式、依赖要求和暂定协议规则 |
 
-设计同步到 [PRODUCT](../PRODUCT.md)、[ARCHITECTURE](../ARCHITECTURE.md)、[ROADMAP](../ROADMAP.md)、[M0](../tasks/M0.md) 与 [任务清单](../tasks/README.md)。[TESTING](../TESTING.md) 记录验证证据，[NEXT_CODEX](../NEXT_CODEX.md) 更新真实阶段的执行条件，[项目 README](../../README.md) 提供当前状态和入口。[AGENTS.md](../../AGENTS.md) 登记后续交付报告约定。
+设计同步到 [PRODUCT](../../design/PRODUCT.md)、[ARCHITECTURE](../../design/ARCHITECTURE.md)、[ROADMAP](../../ROADMAP.md)、[M0](../../tasks/M0.md) 与 [任务清单](../../tasks/README.md)。[TESTING](../../TESTING.md) 记录验证证据，[项目状态](../../STATUS.md) 更新真实阶段的执行条件，[项目 README](../../../README.md) 提供当前状态和入口。[AGENTS.md](../../../AGENTS.md) 登记后续交付报告约定。
 
 ## 验证结果
 

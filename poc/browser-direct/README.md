@@ -4,7 +4,7 @@ PoC 启动两个随机端口，页面和模型 Mock 均绑定到 `127.0.0.1`。C
 
 ## 运行
 
-在 PromptLab 仓库根目录运行以下命令。需要 Node.js 18+、npm 和本机 Chrome。实际验证版本见 [执行记录](../../docs/TESTING.md#poc-01-执行记录)。
+在 PromptLab 仓库根目录运行以下命令。需要 Node.js 18+、npm 和本机 Chrome。实际验证版本见 [执行记录](../../docs/validation/POC-01.md#poc-01-执行记录)。
 
 ```sh
 npm --prefix poc/browser-direct ci --ignore-scripts --no-audit --no-fund

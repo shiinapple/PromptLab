@@ -2,7 +2,7 @@
 
 > 来源：原方案 v0.2 第 3 节。拆分保留原意；示例不是已经实现或验证的功能。
 
-产品边界见 [PRODUCT](PRODUCT.md)，判题见 [JUDGE](JUDGE.md)，资源配额见 [TESTING](TESTING.md)。
+产品边界见 [PRODUCT](PRODUCT.md)，判题见 [JUDGE](JUDGE.md)，资源配额见 [TESTING](../TESTING.md)。
 
 ## 3.1 分工与数据流
 
@@ -45,7 +45,7 @@ Vue 管理连接、凭据、请求预览、模型传输、导入导出与运行�
 | submissions | userId、runId、submittedAt，同一次运行归档幂等 |
 | email_verification / reset_tokens | 需要邮件能力时使用，存 token 哈希、用途、有效期和使用时间 |
 
-连接配置留在浏览器。数据库不存 Base URL、API Key、connectionId、加密字段、可信等级、免费配额或预留结算数据。未完成记录以过期状态收敛，终态只由首次有效提交设置，用户可重新运行。所有查询按用户授权，保留期和账户删除策略见 [决策记录](DECISIONS.md)。
+连接配置留在浏览器。数据库不存 Base URL、API Key、connectionId、加密字段、可信等级、免费配额或预留结算数据。未完成记录以过期状态收敛，终态只由首次有效提交设置，用户可重新运行。所有查询按用户授权，保留期和账户删除策略见 [决策记录](../DECISIONS.md)。
 
 ## 3.4 API 与运行时序
 
