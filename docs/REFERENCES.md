@@ -1,0 +1,9 @@
+# 参考资料与复用边界
+
+> 原稿保留的调研入口，本次未联网重新核验版本、源码、许可或可用性。
+
+- Open WebUI 的 Direct Connections 文档与客户端 API 适合参考直连交互与请求封装。复用代码前核对最终版本、许可证及品牌条款。 [功能说明](https://github.com/open-webui/docs/blob/main/docs/features/chat-conversations/direct-connections.mdx) · [客户端源码](https://github.com/open-webui/open-webui/blob/main/src/lib/apis/openai/index.ts)
+- Ollama 源码提供 OLLAMA_ORIGINS。它能补充允许来源，已安装版本的默认来源、端点与浏览器实际行为仍需核对。CC Switch 和 Magpie 先核查目标版本的 OpenAI Chat Completions、Origin 白名单和自动注入凭据行为。 [Ollama 源码](https://github.com/ollama/ollama/blob/main/envconfig/config.go) · [CC Switch 代理源码](https://github.com/farion1231/cc-switch/blob/main/src-tauri/src/proxy/server.rs) · [Magpie](https://github.com/yetone/magpie)
+- 协议、跨源与浏览器边界参考官方资料。具体浏览器是否放行本机请求、网关是否允许目标 Origin，需验证实际部署。 [OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) · [Chrome Local Network Access](https://developer.chrome.com/blog/local-network-access) · [MDN Mixed Content](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content)
+- P1 候选研究包括 Smokescreen 的出站限制、Dify/n8n 的出站防护、LibreChat 的自定义端点和 New API 的模型网关处理。后四项列为源码调研入口，尚未验证其方案适合本项目；评审需定位源码、测试、漏洞和修复提交，核对维护状态及许可。 [Smokescreen](https://github.com/stripe/smokescreen) · [Dify](https://github.com/langgenius/dify) · [n8n](https://github.com/n8n-io/n8n) · [LibreChat](https://github.com/LibreChat-AI/LibreChat) · [New API](https://github.com/QuantumNous/new-api)
+- 题目交互参考 LeetCode，声明式断言参考 Promptfoo，Schema 评估可验证 networknt。依赖按成熟度、漏洞、许可、体积和版本兼容选择。 [LeetCode](https://support.leetcode.com/hc/en-us/articles/32442719377939-How-to-create-test-cases-on-LeetCode) · [Promptfoo](https://github.com/promptfoo/promptfoo/blob/main/site/docs/guides/evaluate-json.md) · [networknt](https://github.com/networknt/json-schema-validator) · [SQLite WAL](https://www.sqlite.org/wal.html)
