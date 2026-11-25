@@ -2,7 +2,7 @@
 
 面向 Prompt 初学者和开发者的中英文练习平台。用户自带模型；浏览器直连（P0）为主，D0 手动执行与导入为兜底，Java 后端负责严格 JSON 判题及学习记录。目标部署为 2 核 CPU / 2 GB RAM / 40 GB 系统盘。
 
-当前状态：**开发前规划，尚未初始化工程或执行 PoC。** 本目录是规划包，不是可运行项目。
+当前状态：**正式工程尚未初始化。** POC-01 已完成本机浏览器 Mock 验证，真实 HTTPS 阶段待目标环境与授权。见 [POC-01 交付报告](docs/reports/POC-01.md)和[复跑方式](poc/browser-direct/README.md)。
 
 ## 文档入口
 
@@ -23,7 +23,7 @@
 | [AGENTS](AGENTS.md) | 开发 Agent 工作约束 |
 | [NEXT_CODEX](docs/NEXT_CODEX.md) | 可复制的下一条执行指令 |
 
-先确认 DECISIONS 与 REVIEW 中阻塞项，再按 ROADMAP 执行 PoC。原稿中的设计示例、候选依赖及未验证兼容性不能视为完成。工作目录已有 README 或 AGENTS 时应人工合并，不直接覆盖。
+按 ROADMAP 执行 PoC，并在相关任务前确认 DECISIONS 中所需的待定项。原稿中的设计示例、候选依赖及未验证兼容性不能视为完成。工作目录已有 README 或 AGENTS 时应人工合并，不直接覆盖。
 
 ## 设计归档
 

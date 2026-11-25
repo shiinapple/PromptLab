@@ -1,6 +1,6 @@
 # 首批开发任务
 
-每个任务初始状态 TODO。引用的 Q 项需要在相关任务前确认；执行前读取对应权威文档。PoC 任务详见 [TESTING](../TESTING.md)。
+实现任务初始状态为 TODO。引用的 Q 项需要在相关任务前确认；执行前读取对应权威文档。POC-01 本机 Mock 已通过，真实 HTTPS 阶段因环境和授权缺失标记为 BLOCKED。验证详见 [TESTING](../TESTING.md)。
 
 ## [M0](M0.md)
 

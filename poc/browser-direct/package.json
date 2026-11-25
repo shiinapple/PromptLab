@@ -1,0 +1,12 @@
+{
+  "name": "prompt-practice-browser-direct-poc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node harness.mjs",
+    "test": "node harness.mjs --headless"
+  },
+  "dependencies": {
+    "eventsource-parser": "3.0.8"
+  }
+}

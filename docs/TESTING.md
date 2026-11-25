@@ -1,6 +1,6 @@
 # 技术验证与测试计划
 
-所有 PoC 初始状态为 NOT_RUN。记录实际环境、依赖锁定版本、命令、观察、脱敏证据、结论和未覆盖项。PASS/FAIL/BLOCKED/NOT_RUN 分开。Mock 通过不能代替真实网关或同规格服务器验证。
+以下记录已执行的 PoC 证据。其余 PoC 状态为 NOT_RUN。记录实际环境、依赖锁定版本、命令、观察、脱敏证据、结论和未覆盖项。PASS/FAIL/BLOCKED/NOT_RUN 分开。Mock 通过不能代替真实网关或同规格服务器验证。
 
 ## 原稿验证矩阵
 
@@ -9,18 +9,18 @@
 | 网关和浏览器 | 从真实 HTTPS Origin 验证 CC Switch、Magpie、Ollama、至少一个目标用户常用公网兼容网关和一个官方 Chat Completions API。覆盖目标 macOS/Windows/Linux 与 Chromium/Safari/Firefox 的代表组合。记录版本、协议、Origin 白名单能力、预检、权限提示、列表、普通生成、SSE 和取消。浏览器与 CLI 分别记录通过或失败原因，暂未测试标未验证 |
 | 凭据与 CSP | 验证公网 HTTPS、受限 loopback、同源业务 API 与脚本策略；核对配置切换、重定向拒绝、清除和注销。抓取请求和日志确认未发 Key 给平台；核对不可信链接、图片及文本不执行、不自动外连 |
 | D0 与统一判题 | 用同一原文走直连回传、Bash、Windows PowerShell 和粘贴，验证同判定；用错文件、401、3xx、超时、截断和无正文分别验证不会产生可误导入的结果。测试零配置和可选 Key，核对多用例关联 |
-| 栈和资源 | 验证 Java 21、Boot/MVC、SQLite 驱动与迁移工具、Schema 库、SSE 库的兼容和许可证；验证 2 核 2 GB 的运行余量与 SQLite 恢复。补齐旧项目源码与 Design Token 的复用核对 |
+| 栈和资源 | 验证 Java 21、Boot/MVC、SQLite 驱动与迁移工具、Schema 库、SSE 库的兼容和许可证；验证 2 核 2 GB 的运行余量与 SQLite 恢复。正式界面开发前核对可用的 Design Token |
 | 视觉题 | 验证实际模型支持图片 content parts、平台题图素材和请求大小限制；同一图文快照可直连与离线导出。通不过就保留样题设计，推迟正式发布 |
 
 ## 原稿 MVP 验收
 
-- 题目与草稿。三类样题走同一页面，预览与 payload 一致，i18n、切换运行方式、断网和题目升级都保留对应草稿与历史，越权或非法样例绑定由后端拒绝。
+- 题目与草稿。文字题 001/002 走同一页面，预览与 payload 一致，i18n、切换运行方式、断网和题目升级都保留对应草稿与历史，越权或非法样例绑定由后端拒绝。
 - 判题。正常 JSON 与标准空白通过解析，围栏、附文、多值、重复键、错误类型失败。检查数组顺序规则、参考字段不计分和金额类型，区分格式错、答案错与传输故障。
 - 模型。覆盖兼容普通响应、SSE 跨包 UTF-8 与多行事件、完整结束、空响应、断流、过大、取消、超时、401/404/429/5xx。故障保留页面内片段，普通运行不判题。刷新不重新触发推理。
 - 安全。账号隔离、CSRF、CSP/XSS、密钥生命周期和客户端配置隔离、日志脱敏、导入与 REST 大小上限、题图 MIME/大小及 Schema 无远程读取。服务端使用自己选定的题目规则并拒绝客户端覆盖。
 - 记录与部署。验证快照不可变、结果提交重试、归档幂等、并发与过期、掉线重取已有结果，以及同规格主机测量和备份恢复。
 
-> 上述原稿含三类样题；建议文本 MVP 与视觉题发布门槛分离（REVIEW R14），尚待确认。
+> 文字题 001/002 先发布。视觉题 003 单独走 POC-06 和发布验收（DECISIONS D10）。
 
 ## POC-01：浏览器直连（最高优先级）
 
@@ -36,7 +36,26 @@
 
 | OS/浏览器版本 | 网关/版本 | Origin | CORS/权限 | 列表 | 普通 | SSE | 取消 | CLI | 结论/证据 |
 |---|---|---|---|---|---|---|---|---|---|
-| 待填 | 待填 | 待填 | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | 未测试 |
+| macOS 26.5.2 arm64 / Chrome Headless 158.0.8127.38 | 本机受控 Mock | `http://127.0.0.1:65183` → `http://127.0.0.1:65184` | PASS，覆盖允许/拒绝预检和实际响应缺 CORS 头；LNA / 混合内容 NOT_RUN | PASS | PASS | PASS | NOT_RUN | 本机浏览器 34/34 |
+| 目标 OS / 浏览器待确认 | CC Switch、Magpie、Ollama、公网兼容网关、官方 Chat Completions API | 真实 HTTPS 测试站待提供 | BLOCKED | BLOCKED | BLOCKED | BLOCKED | NOT_RUN | 缺测试站、目标端点与版本及实际调用授权 |
+
+### POC-01 执行记录
+
+2026-11-25。本机 Mock **PASS**，真实 HTTPS **BLOCKED**。源码与运行方式见 [浏览器直连 PoC](../poc/browser-direct/README.md)。本机使用 Node.js 26.13.1、npm 11.20.0，以及锁定的 [eventsource-parser 3.0.8](https://www.npmjs.com/package/eventsource-parser/v/3.0.8)（MIT）。依赖只用于 PoC。
+
+| 实际操作 | 退出码与结果 |
+|---|---|
+| `npm --prefix poc/browser-direct install --offline --ignore-scripts --no-audit --no-fund` | 1，npm 元数据缓存不可用（ENOTCACHED） |
+| `npm --prefix poc/browser-direct install --ignore-scripts --no-audit --no-fund` | 0，安装 1 个锁定依赖 |
+| 默认沙箱用 Node 尝试绑定 `127.0.0.1` | Node 探测失败（EPERM）；同批末项环境查询成功，整条命令退出码 0 |
+| `npm --prefix poc/browser-direct test`（允许本机端口和 Chrome 进程后） | 0，首次 33/33；新增取消竞态用例后 34/34 |
+| `npm --prefix poc/browser-direct ci --offline --ignore-scripts --no-audit --no-fund` | 0，按锁文件重装成功 |
+| `node --check`（4 个 .mjs 文件）与 `git diff --check` | 均为 0 |
+
+- 请求证据。JSON POST 收到一次 OPTIONS，预检包含 `authorization,content-type`，随后收到一次 POST。拒绝预检时为一次 OPTIONS、零 POST。仅实际响应缺 CORS 头时，Mock 收到 POST，Fetch 读不到响应。
+- 协议证据。覆盖模型列表失败后手填 ID、无 Key、正文逐字符保留、跨写块 UTF-8、SSE 多行/空事件、`stop` + `[DONE]`、EOF/断流、非法 UTF-8、非正常结束、空正文、工具调用、HTTP 401/404/429/503 和三个字节上限。把 `stop` + `[DONE]` 当作本次候选结束规则，Q08/Q10 仍需真实联调确认。
+- 取消与超时。Mock 观察到取消及首响应、流空闲、总时长超时各触发一次请求并断开。显式取消保留已收到的正文片段，也覆盖了结束事件已缓冲的情况。真实上游的计费停止情况未验证。
+- 真实阶段。需确定测试站 Origin、首个网关的端点与版本、目标浏览器及短请求授权。Safari、Firefox、其他操作系统和 HTTPS → loopback 的本地网络权限、混合内容行为均未运行。
 
 ## POC-02：凭据与前端安全
 
@@ -70,7 +89,7 @@
 
 ## POC-06：视觉题（独立后置）
 
-先由所有者制作虚构无个人信息题图，验证受信 MIME/尺寸、固定资产引用、真实视觉模型、data URL 与 D0 导出/导入。通过后才能公开样题 003；未通过不阻塞文本 MVP（建议）。不声称已具备 Agent 工具调用。
+先由所有者制作虚构无个人信息题图，验证受信 MIME/尺寸、固定资产引用、真实视觉模型、data URL 与 D0 导出/导入。通过后才能公开样题 003；未通过不阻塞文本 MVP。不声称已具备 Agent 工具调用。
 
 ## 初始实验参数（待确认/实测）
 

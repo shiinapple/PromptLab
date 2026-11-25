@@ -51,7 +51,7 @@ Vue 管理连接、凭据、请求预览、模型传输、导入导出与运行�
 
 | 方法与路径 | 用途 |
 |---|---|
-| POST /api/auth/register、/login、/logout | 注册、登录、退出，可按邮件方案接入验证与重置 |
+| POST /api/auth/login、/logout | 首版供预建账户登录和退出；公开自助注册、邮件验证与找回后置 |
 | GET /api/me；GET/PATCH /api/settings | 账号和非敏感偏好 |
 | GET /api/problems；GET /api/problems/{id} | 题库、题目版本、编辑槽与公开样例 |
 | GET/PUT /api/problems/{id}/draft | 草稿，revision 防覆盖 |
@@ -64,8 +64,8 @@ Vue 管理连接、凭据、请求预览、模型传输、导入导出与运行�
 
 ## 3.5 账户、资源与部署
 
-同源 Cookie 使用 Secure、HttpOnly、SameSite=Lax，修改请求启用 CSRF。使用 Spring Security PasswordEncoder、登录限速、会话轮换与合理 TTL。邮箱规范化避免擅自删除加号或点号。公开注册的验证和找回依赖邮件服务，邀请内测可采用预建账号。日志只记录必要的业务元数据，严禁记录凭据和完整请求体，不开启生产调试端点。
+同源 Cookie 使用 Secure、HttpOnly、SameSite=Lax，修改请求启用 CSRF。使用 Spring Security PasswordEncoder、登录限速、会话轮换与合理 TTL。邮箱规范化避免擅自删除加号或点号。首版由项目所有者预建内测账号。公开自助注册与找回后置，届时核对邮件服务与验证流程。日志只记录必要的业务元数据，严禁记录凭据和完整请求体，不开启生产调试端点。
 
 2 核 2 GB 环境中，将 SQLite、Java 和 Nginx 部署在同一主机，静态资源在构建环境产出。通过模拟用户请求测试 JVM RSS、CPU、事务并发、磁盘增长和备份恢复；限制 API 请求体及判题负载，配置日志轮转。备份使用 SQLite 一致性备份方式并做恢复演练。运行途中重启允许客户端查询快照和提交待判正文，过期运行可从草稿重新建立。没有平台模型 SSE 路径，无需专门配置 Nginx 的模型流式转发。具体 JVM 配额、正文大小、历史留存期按同规格验证结果确定。
 
-原稿提及 Vue + Spring Boot 待办项目和 code/frontend/src/color-tokens.css。当前工作区未提供这些源码。开发前只读核对依赖、认证、部署配置及真实 Design Token，经确认再复用通用配置和组件。建议 frontend/、backend/、content/、deploy/、docs/，后端业务包按模块组织。
+完全新建项目。候选依赖以 PoC 验证为准，正式界面的 Design Token 按 UI 文档单独核对。建议 frontend/、backend/、content/、deploy/、docs/，后端业务包按模块组织。
