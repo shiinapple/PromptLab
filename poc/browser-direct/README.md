@@ -21,3 +21,7 @@ macOS 默认查找 `/Applications/Google Chrome.app`，其他平台查找 PATH �
 - Fetch 层用 `redirect: 'error'` 和 `credentials: 'omit'`，Authorization 仅含固定的虚构 Key。页面与 Mock 分端口，Mock 仅允许实验页 Origin。
 - 响应按实际读取的字节累计。SSE 单事件上限在解析到完整事件时检查，未结束事件受整个响应的字节上限约束。测试缩短部分时间和字节阈值以触发故障。
 - 取消、超时、断流等只返回失败状态及已收到的片段。浏览器收到的不透明 Fetch 或流读取错误使用通用错误码，定位时结合预检和 Mock 计数。
+
+## POC-02 本机凭据与 CSP
+
+在仓库根目录执行 `npm --prefix poc/browser-direct run test:security`。同源平台 Mock 和两个跨源模型 Mock 都绑定 loopback。测试为每次运行生成虚构 Key，Chrome 通过本地调试管道打开独立标签页。详情见 [执行记录](../../docs/validation/POC-02.md#poc-02-执行记录)。

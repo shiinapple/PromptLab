@@ -1,0 +1,44 @@
+{
+  "run_id": "preflight",
+  "fingerprint_sha256": "f54d4ee0e39755942106d30d2f4e4f5ebad92527d041cab06b651caa8662cb81",
+  "created_utc": "2026-11-26T04:00:04.455294+00:00",
+  "execution": "DRY_RUN",
+  "base_url": "https://api.deepseek.com",
+  "config": {
+    "schema": 1,
+    "seed": 20261125,
+    "model": "deepseek-flash",
+    "thinking": {
+      "type": "disabled"
+    },
+    "stream": false,
+    "temperature": 0.3,
+    "max_tokens": 256,
+    "timeout_seconds": 60,
+    "attempt_limit": 120,
+    "budget_nusd": 1000000000,
+    "minimum_input_tokens_reserved": 1000,
+    "peak_price_nusd_per_token": {
+      "input_miss": 300,
+      "input_hit": 6,
+      "output": 1200
+    },
+    "repeats": {
+      "T1": 3,
+      "T2": 2,
+      "T3": 2
+    }
+  },
+  "tools": {
+    "python": "3.12.13",
+    "openai": "2.26.0",
+    "httpx": "0.28.1"
+  },
+  "planned": {
+    "SMOKE": 2,
+    "T1": 72,
+    "T3": 24,
+    "T2": 12
+  },
+  "planned_reserved_nusd": 66792000
+}

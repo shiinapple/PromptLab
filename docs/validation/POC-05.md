@@ -1,8 +1,8 @@
-# POC-05：D0 与统一运行结果
+# POC-05：严格 JSON 判题
 
 [验证总览](../TESTING.md)
 
-- 最小实验：浏览器生成一个请求、导入 mock 响应文件、粘贴原文；CLI 使用 [Bash / PowerShell 指南](../guides/D0_CLI.md)，真实命令仅在具备环境并获授权后测试。
-- 测试：同一原文经普通响应、SSE 完整拼接、JSON 文件、粘贴后逐字符一致；预览/冻结快照/实际 messages 一致；Key 不出现在 JSON；文件上限、非法 UTF-8、错误外壳、null/空白 content、截断、tool calls；HTTP 3xx/401/超时失败不产生本次可导入结果；旧文件/错 case 以用户确认处理，不做防作弊。
-- 通过：四条来源一致判定；D0 零配置可完成，取消/错误不进入判题；每次独立输出目录，状态检查有效。
-- 失败：先保留复制 JSON + 粘贴，修正文件与命令指南；不要求用户关闭 TLS 或浏览器保护。
+- 最小实验：JUnit + Jackson + 候选 JSON Schema validator（2020-12），本地受信 schema；样题 002 一个 case。
+- 测试：[fixture 矩阵](../TESTING.md#最小判题-fixture-矩阵)；重复键、尾随 token、深度/数值限制；拒绝远程 $ref（mock 观察无外连）；类型、整数语义、数组顺序、重复 length、BigDecimal；格式错与答案错分离。
+- 通过：所有 fixture 与预期一致，不提取或修复 JSON，解析与 Schema 校验可配置明确上限。最坏输入不使应用失去响应。
+- 失败：更换或配置成熟库；不要自写 JSON parser 或允许任意脚本作为替代。

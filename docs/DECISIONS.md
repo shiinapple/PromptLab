@@ -11,32 +11,43 @@
 | D03 | 直连 Key 默认内存，可主动使用 sessionStorage；不得进入平台 API | MODEL_INTEGRATION |
 | D04 | Java 统一严格 JSON + Schema + 确定性规则；不做 LLM-as-Judge | JUDGE |
 | D05 | 每次运行一个公开用例；冻结版本与输入；归档不重复推理 | ARCHITECTURE |
-| D06 | Java 21、Boot/MVC、Vue/TS/Vite、SQLite、同源会话、Nginx/systemd；cn.shiinapple | ARCHITECTURE |
+| D06 | Java 21、Boot MVC、Spring JDBC、HikariCP、Flyway、SQLite、Vue/TS/Vite、同源会话、Nginx/systemd；Java 包名前缀 cn.shiinapple | 所有者确认 / POC-04 |
 | D07 | 中英界面；题库由所有者维护；不执行用户代码、任意 MCP 或真实业务操作 | PRODUCT / PROBLEMS |
 | D08 | P1 独立代理、P2 本地客户端/扩展后置；视觉题通过验证才发布 | PRODUCT / MODEL_INTEGRATION |
 | Q02 | 首版采用预建账户，面向受邀用户内测。公开自助注册与邮件找回后置 | 所有者确认 |
 | Q05 | 完全新建项目，不迁入旧项目代码、配置或组件。正式界面使用的 Design Token 另行核对 | 所有者确认 |
 | D09 | POC-01 先跑本机 Mock，再从真实 HTTPS 测试站验证目标网关 | 所有者确认 |
 | D10 | 文字题 001/002 先发布。视觉题 003 单独验证和发布 | 所有者确认 / REVIEW R14 |
+| D11 | 2 核、2 GiB 目标下采用模块化单体，优先成熟框架和类库，按实际需求演进 | 所有者确认 / POC-04 |
+| D12 | 正式架构先行，评审通过即进入 M0。验证按架构、功能、上线门槛归位，保留既有 PoC 证据 | 所有者确认 / TESTING |
+| D13 | 自由选择 Prompt 编写方式，以实际输出正确性及可观察的稳定性、效率开展练习评价 | 所有者确认 / POC-03 |
 
 ## 待确认（原稿 + 审查新增建议）
 
-| ID | 事项 | 推荐默认值（未确认） | 最晚决定 |
-|---|---|---|---|
-| Q01 | 真实 HTTPS Origin、目标浏览器、网关版本与调用授权 | 本机 Mock 先行；真实联调优先覆盖用户常用组合 | POC-01 真实阶段前 |
-| Q03 | 题库通过状态 | 以已归档通过的运行标记，绑定题目版本，单用例通过不代表全部通过；允许失败归档 | M3 前 |
-| Q04 | 留存与删除 | 未归档终态先建议 30 天；待处理 24 小时（D0），直连待处理 10 分钟；归档保留至用户删除，账号删除处理关联记录及备份生命周期 | M1 状态契约前确定过期语义；M4 前确定正式留存 |
-| Q06 | 正式题目与版权 | 先样题 002 做闭环；001 结构题随后；Claude 讲座原题由用户提供 | M1/M3 前 |
-| Q07 | 变量模板语法 | 固定输入优先固定消息；需要嵌入 slot 的题强制出现必需占位符；单次替换、明确转义，前后端 golden fixture | M1 前 |
-| Q08 | 上限及终止状态 | 见 TESTING 初始实验值；通过真实联调后锁定 | POC-01/03/04/05 后 |
-| Q09 | 运行幂等与过期 | 首次合法终态胜出；相同语义重试返回已有结果，不同内容返回 409；过期后新建，不复活 | M1 前 |
-| Q10 | 直连启用策略与 CSP | HTTPS 公网 + 显式 loopback HTTP；来源限制与真实浏览器测试；禁止任意 LAN 地址 | POC-01/02 后 |
-| Q11 | 草稿冲突与本地数据 | revision 乐观锁，冲突由用户选择；账号切换隔离；匿名草稿是否同步需确认 | M4 前 |
-| Q12 | 跨语言进度 | 相同输入可共享 caseId；不同语言输入绑定独立 caseId/locale，切换语言不覆盖已编辑文本 | M3 前 |
+| ID | 需要所有者决定或提供的信息 | 最晚决定 |
+|---|---|---|
+| Q01 / Q10 | 提供测试站 Origin、首批浏览器与网关版本，授权短请求；根据真实结果确认内测支持范围及 CSP 策略。优先允许有明确需求且实测可用的来源，任意公网 HTTPS 支持若成为需求再评审。 | M2 需要真实联调时；支持范围在 M6 发布评审前确认 |
+| Q06 | 002、001 用于实现和验证；正式题目版权及是否引入用户提供的讲座原题，由所有者确定。 | 相关内容发布前 |
+| Q04 | 确认内测数据保留与删除承诺、备份保留期及可接受恢复窗口。建议未归档终态 30 天、归档至用户删除；清理、删除、备份生命周期需一并审阅。 | M4 涉及定时删除前、M6 内测发布前 |
+
+本阶段只需一次架构评审。上表按实际推进集中处理，均不阻塞 M0。
+
+## 工程建议
+
+| ID | 推荐实施基线 | 核对时机 |
+|---|---|---|
+| Q03 / Q12 | 进度按题目版本和公开 case 记录，失败也可归档；相同输入跨语言共用 caseId，不同输入单独编号。 | M3/M4 |
+| Q07 | 优先显式消息片段，需要内嵌时只做单次替换，前后端 golden fixture 锁定。 | M1-01/02 |
+| Q08 | 用 TESTING 的初始实验上限和严格正常终止条件，按实际负载与目标兼容性调整。 | M1/M2 实现时；M6 再核验 |
+| Q09 / Q04 | 首个合法终态写入获胜，同有效载荷重试返回既有结果，变更正文需新建。待处理 D0 24 小时、直连 10 分钟为初始候选。 | M1-04 按状态机与并发测试 |
+| Q11 | 草稿 revision 乐观锁，冲突时保留本地编辑；按账号和版本隔离，暂缓匿名草稿同步。 | M4 |
+
+[工程结构与部署](design/ARCHITECTURE.md) · [数据模型](design/DATA_MODEL.md) · [REST API](design/API.md) · [题目包](design/PROBLEMS.md#正式题目包与版本契约)
 
 ## 待验证依赖
 
-Java 21 发行版、受支持 Spring Boot 版本、SQLite JDBC、Spring JDBC/JdbcClient、Flyway（如采用）、Jackson、JSON Schema validator（networknt 候选）、Vue Router、Vue I18n、SSE parser、UI 组件库/Pinia（按需）、JUnit/MockMvc/浏览器测试工具。不得仅凭推荐锁版本。验证兼容性、维护、许可证、真实接口与最小资源表现；无生产 Node。
+- POC-04 已验证一套 Java 21、Boot MVC、SQLite JDBC、Spring JDBC、HikariCP、Flyway 与 Jackson 工作组合。M0 将该组合用作可复现基线，核对正式工程的依赖支持、锁定版本、许可及干净构建。调整核心组合时只复验受影响路径。[版本与 PoC 证据](validation/POC-04.md#poc-04-执行记录)
+- Schema 库（networknt 为候选）在 M1 验证与 Jackson、2020-12、本地引用和资源上限的兼容。SSE parser 已有 POC-01 的 Mock 证据，M2 再核对正式前端打包和异常边界。安全依赖在 M4，部署资源和真实软件环境在 M6/M7 验收。
 
 ## 后置触发条件
 
@@ -53,3 +64,4 @@ Java 21 发行版、受支持 Spring Boot 版本、SQLite JDBC、Spring JDBC/Jdb
 | 2026-11-25 | Q02 | 首版账户方式待确认 | 预建账户、邀请内测 | 所有者确认 | PRODUCT、ARCHITECTURE、ROADMAP |
 | 2026-11-25 | D10 / R14 | 三类样题同列 MVP 验收 | 文字题先发布、视觉题单独验证 | 所有者确认 | PRODUCT、TESTING、ROADMAP |
 | 2026-11-25 | Q05 | 待核对旧项目复用 | 完全新建 | 所有者确认 | ARCHITECTURE、ROADMAP、M0 |
+| 2026-11-25 | D06 / D11–D13 | 技术组合待进一步验证，PoC 集中先走 | 骨架按已验证栈进入评审，余项随功能或上线验证 | 所有者本轮指令；[验证分层](TESTING.md#验证门槛) | ARCHITECTURE、ROADMAP、STATUS、M0–M2 |

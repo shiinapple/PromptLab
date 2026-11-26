@@ -5,17 +5,23 @@ import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {modelMock} from './mock.mjs';
+import {securityFixtures} from './security-mock.mjs';
 
 const headless = process.argv.includes('--headless');
+const security = process.argv.includes('--security');
 const address = '127.0.0.1';
 let trace = Object.create(null);
 let pageOrigin;
 let mockOrigin;
 let report;
+let openTab;
+const fixtures = securityFixtures();
 const staticFiles = new Map([
   ['/', ['index.html', 'text/html']],
   ['/cases.mjs', ['cases.mjs', 'text/javascript']],
   ['/transport.mjs', ['transport.mjs', 'text/javascript']],
+  ['/security/cases.mjs', ['security-cases.mjs', 'text/javascript']],
+  ['/security/connection.mjs', ['security-connection.mjs', 'text/javascript']],
   ['/eventsource-parser.mjs', ['node_modules/eventsource-parser/dist/index.js', 'text/javascript']],
 ]);
 
@@ -26,6 +32,21 @@ const page = createServer(async (request, response) => {
     return;
   }
   try {
+    if (security && await fixtures.platform(request, response)) return;
+    if (security && request.method === 'POST' && request.url.startsWith('/security/open?')) {
+      const {searchParams} = new URL(request.url, pageOrigin);
+      const mode = searchParams.get('mode');
+      const id = searchParams.get('id') ?? '';
+      if (request.headers.origin !== pageOrigin ||
+          !['refresh', 'isolated', 'fixed', 'frame'].includes(mode) || !/^[a-f0-9-]{36}$/.test(id)) {
+        response.writeHead(400).end();
+        return;
+      }
+      const path = mode === 'fixed' ? '/security/fixed' : mode === 'frame' ? '/security/frame-parent' : '/security/context';
+      await openTab(pageOrigin + path + '?' + new URLSearchParams({mode, id}));
+      response.writeHead(204).end();
+      return;
+    }
     if (request.url === '/results' && request.method === 'POST' && headless) {
       let body = '';
       for await (const chunk of request) {
@@ -35,6 +56,7 @@ const page = createServer(async (request, response) => {
           return;
         }
       }
+      if (security) fixtures.observeReport(request, body);
       const results = JSON.parse(body);
       response.writeHead(204).end();
       report(results);
@@ -69,11 +91,46 @@ const page = createServer(async (request, response) => {
   }
 });
 const mock = createServer((request, response) => modelMock(pageOrigin, trace)(request, response));
+const securityModels = [createServer(fixtures.model('selected')), createServer(fixtures.model('alternate'))];
 
 async function listen(server) {
   server.listen(0, address);
   await once(server, 'listening');
   return 'http://' + address + ':' + server.address().port;
+}
+
+function chromeTabs(browser, signal) {
+  const [, , , input, output] = browser.stdio;
+  let latest = 0;
+  let buffer = '';
+  const pending = new Map();
+  output.setEncoding('utf8');
+  output.on('data', chunk => {
+    const frames = (buffer + chunk).split('\0');
+    buffer = frames.pop();
+    for (const frame of frames) {
+      const {id, error} = JSON.parse(frame);
+      const request = pending.get(id);
+      if (!request) continue;
+      pending.delete(id);
+      if (error) request.reject(new Error('Chrome could not create the test tab'));
+      else request.resolve();
+    }
+  });
+  signal.addEventListener('abort', () => {
+    for (const request of pending.values()) request.reject(new Error('Chrome test ended'));
+    pending.clear();
+  }, {once: true});
+  return url => new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const id = ++latest;
+    pending.set(id, {resolve, reject});
+    input.write(JSON.stringify({id, method: 'Target.createTarget', params: {url}}) + '\0', error => {
+      if (!error) return;
+      pending.delete(id);
+      reject(error);
+    });
+  });
 }
 
 async function testChrome() {
@@ -83,8 +140,11 @@ async function testChrome() {
   const profile = await mkdtemp(join(tmpdir(), 'prompt-practice-chrome-'));
   const browser = spawn(chrome, [
     '--headless', '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
-    '--user-data-dir=' + profile, pageOrigin + '/?autorun',
-  ], {stdio: ['ignore', 'ignore', 'pipe']});
+    ...(security ? ['--remote-debugging-pipe'] : []),
+    '--user-data-dir=' + profile, pageOrigin + (security ? '/security/?autorun' : '/?autorun'),
+  ], {stdio: security ? ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'ignore', 'pipe']});
+  const testing = new AbortController();
+  if (security) openTab = chromeTabs(browser, testing.signal);
   let diagnostics = '';
   browser.stderr.on('data', chunk => { diagnostics = (diagnostics + chunk).slice(-4000); });
   let deadline;
@@ -106,6 +166,7 @@ async function testChrome() {
     console.error(diagnostics);
     throw error;
   } finally {
+    testing.abort();
     clearTimeout(deadline);
     if (browser.pid && browser.exitCode === null && browser.signalCode === null) {
       const exited = once(browser, 'exit');
@@ -119,6 +180,7 @@ async function testChrome() {
 try {
   pageOrigin = await listen(page);
   mockOrigin = await listen(mock);
+  if (security) fixtures.configure(pageOrigin, await Promise.all(securityModels.map(listen)));
   console.log('Page: ' + pageOrigin + ' | Mock: ' + mockOrigin);
   if (headless) await testChrome();
 } catch (error) {
@@ -126,7 +188,7 @@ try {
   process.exitCode = 1;
 } finally {
   if (headless || process.exitCode) {
-    for (const server of [page, mock]) {
+    for (const server of [page, mock, ...securityModels].filter(server => server.listening)) {
       server.close();
       server.closeAllConnections();
     }

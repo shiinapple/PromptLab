@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node harness.mjs",
-    "test": "node harness.mjs --headless"
+    "test": "node harness.mjs --headless",
+    "test:security": "node harness.mjs --headless --security"
   },
   "dependencies": {
     "eventsource-parser": "3.0.8"

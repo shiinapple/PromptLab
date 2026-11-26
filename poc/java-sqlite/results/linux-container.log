@@ -1,0 +1,289 @@
+Linux aarch64
+openjdk version "21.0.9" 2025-10-21 LTS
+OpenJDK Runtime Environment Temurin-21.0.9+10 (build 21.0.9+10-LTS)
+OpenJDK 64-Bit Server VM Temurin-21.0.9+10 (build 21.0.9+10-LTS, mixed mode, sharing)
+Apache Maven 3.9.11 (3e54c93a704957b63ee3494413a2b544fd3d825b)
+Maven home: /usr/share/maven
+Java version: 21.0.9, vendor: Eclipse Adoptium, runtime: /opt/java/openjdk
+Default locale: en_US, platform encoding: UTF-8
+OS name: "linux", version: "6.12.54-linuxkit", arch: "aarch64", family: "unix"
+cpu.max=200000 100000
+memory.max=2147483648
+memory.swap.max=0
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------< cn.shiinapple.promptpractice:poc-java-sqlite >------------
+[INFO] Building poc-java-sqlite 0.1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ poc-java-sqlite ---
+[INFO] Deleting /work/target
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ poc-java-sqlite ---
+[INFO] Copying 0 resource from src/main/resources to target/classes
+[INFO] Copying 2 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ poc-java-sqlite ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 1 source file with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ poc-java-sqlite ---
+[INFO] Copying 2 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ poc-java-sqlite ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 3 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ poc-java-sqlite ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running cn.shiinapple.promptpractice.pocsqlite.StackTest
+INFO o.s.t.c.s.AnnotationConfigContextLoaderUtils - Could not detect default configuration classes for test class [cn.shiinapple.promptpractice.pocsqlite.StackTest]: StackTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+INFO o.s.b.t.c.SpringBootTestContextBootstrapper - Found @SpringBootConfiguration cn.shiinapple.promptpractice.pocsqlite.SqlitePoc for test class cn.shiinapple.promptpractice.pocsqlite.StackTest
+INFO o.s.t.c.s.AnnotationConfigContextLoaderUtils - Could not detect default configuration classes for test class [cn.shiinapple.promptpractice.pocsqlite.StackTest]: StackTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+INFO o.s.b.t.c.SpringBootTestContextBootstrapper - Found @SpringBootConfiguration cn.shiinapple.promptpractice.pocsqlite.SqlitePoc for test class cn.shiinapple.promptpractice.pocsqlite.StackTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.3)
+
+INFO c.s.p.pocsqlite.StackTest - Starting StackTest using Java 21.0.9 with PID 148 (started by root in /work)
+INFO c.s.p.pocsqlite.StackTest - No active profile set, falling back to 1 default profile: "default"
+INFO o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 0 (http)
+INFO o.a.c.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-127.0.0.1-auto-1"]
+INFO o.a.c.core.StandardService - Starting service [Tomcat]
+INFO o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.27]
+INFO o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 522 ms
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.sqlite.jdbc4.JDBC4Connection@3962ec84
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-5320762319897161991/web.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.006s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+INFO o.a.c.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-127.0.0.1-auto-1"]
+INFO o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 40251 (http) with context path '/'
+INFO c.s.p.pocsqlite.StackTest - Started StackTest in 1.034 seconds (process running for 1.647)
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.18.17/byte-buddy-agent-1.18.17.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+INFO o.a.c.c.C.[.[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+INFO o.s.w.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+INFO o.s.w.servlet.DispatcherServlet - Completed initialization in 0 ms
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.939 s -- in cn.shiinapple.promptpractice.pocsqlite.StackTest
+[INFO] Running cn.shiinapple.promptpractice.pocsqlite.WorkloadTest
+POC_LOAD clients,transactions,errors,p50_ms,p95_ms,elapsed_ms,cpu_ms,jvm_rss_kib,jvm_peak_rss_kib,disk_growth_bytes
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-2 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-2 - Added connection org.sqlite.jdbc4.JDBC4Connection@68b3979d
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-2 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-11408655949258605243/load-1.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.003s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.001s)
+POC_LOAD 1,100,0,0.488,1.514,67.535,50.000,213924,213924,824000
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-3 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-3 - Added connection org.sqlite.jdbc4.JDBC4Connection@61e0f9b9
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-3 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-11408655949258605243/load-5.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.000s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+POC_LOAD 5,500,0,0.336,3.646,226.524,130.000,215464,215464,4086800
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-4 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-4 - Added connection org.sqlite.jdbc4.JDBC4Connection@34e9de8d
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-4 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-11408655949258605243/load-10.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.000s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+POC_LOAD 10,1000,0,0.380,23.097,723.208,440.000,217320,217320,4123760
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-4 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-4 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-5 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-5 - Added connection org.sqlite.jdbc4.JDBC4Connection@1734b1a
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-5 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-3224761028638454517/race.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.000s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-5 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-5 - Shutdown completed.
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.188 s -- in cn.shiinapple.promptpractice.pocsqlite.WorkloadTest
+[INFO] Running cn.shiinapple.promptpractice.pocsqlite.DatabaseTest
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-6 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-6 - Added connection org.sqlite.jdbc4.JDBC4Connection@6a562255
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-6 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-3534037631628781543/upgrade.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.005s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 1 migration to schema "main", now at version v1 (execution time 00:00.000s)
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-6 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-6 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-7 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-7 - Added connection org.sqlite.jdbc4.JDBC4Connection@632b96b8
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-7 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-3534037631628781543/upgrade.sqlite (SQLite 3.54)
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.001s)
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": 1
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 1 migration to schema "main", now at version v2 (execution time 00:00.000s)
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-7 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-7 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-8 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-8 - Added connection org.sqlite.jdbc4.JDBC4Connection@2ef1fc8a
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-8 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-147309522383581760/busy.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.000s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+POC_BUSY expected_sqlite_code=5 timeout_ms=250 observed_ms=285
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-8 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-8 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-9 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-9 - Added connection org.sqlite.jdbc4.JDBC4Connection@1fa44f66
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-9 - Start completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-9 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-9 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-10 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-10 - Added connection org.sqlite.jdbc4.JDBC4Connection@673605ef
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-10 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-151491056024765347/source.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.001s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-10 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-10 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-11 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-11 - Added connection org.sqlite.jdbc4.JDBC4Connection@1be427b4
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-11 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-151491056024765347/restored.sqlite (SQLite 3.54)
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.001s)
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": 2
+INFO o.f.c.internal.command.DbMigrate - Schema "main" is up to date. No migration necessary.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-11 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-11 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-12 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-12 - Added connection org.sqlite.jdbc4.JDBC4Connection@5b71af0d
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-12 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-12445185032885046249/fresh.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.000s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-12445185032885046249/fresh.sqlite (SQLite 3.54)
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-12 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-12 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-13 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-13 - Added connection org.sqlite.jdbc4.JDBC4Connection@41d84abb
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-13 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-12445185032885046249/fresh.sqlite (SQLite 3.54)
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.001s)
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": 2
+INFO o.f.c.internal.command.DbMigrate - Schema "main" is up to date. No migration necessary.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-12445185032885046249/fresh.sqlite (SQLite 3.54)
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.001s)
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-13 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-13 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-14 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-14 - Added connection org.sqlite.jdbc4.JDBC4Connection@3c8e4a82
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-14 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-10744257125166903972/broken.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.001s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-10744257125166903972/broken.sqlite (SQLite 3.54)
+INFO o.f.c.i.command.DbValidate - Successfully validated 3 migrations (execution time 00:00.001s)
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": 2
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "3 - invalid fixture"
+ERROR o.f.c.internal.command.DbMigrate - Migration of schema "main" to version "3 - invalid fixture" failed! Changes successfully rolled back.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-10744257125166903972/broken.sqlite (SQLite 3.54)
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-14 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-14 - Shutdown completed.
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-15 - Starting...
+INFO c.zaxxer.hikari.pool.HikariPool - HikariPool-15 - Added connection org.sqlite.jdbc4.JDBC4Connection@72641613
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-15 - Start completed.
+INFO o.flywaydb.core.FlywayExecutor - Database: jdbc:sqlite:/tmp/junit-3411330096277002565/transaction.sqlite (SQLite 3.54)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Schema history table "main"."flyway_schema_history" does not exist yet
+INFO o.f.c.i.command.DbValidate - Successfully validated 2 migrations (execution time 00:00.000s)
+INFO o.f.c.i.s.JdbcTableSchemaHistory - Creating Schema History table "main"."flyway_schema_history" ...
+INFO o.f.c.internal.command.DbMigrate - Current version of schema "main": << Empty Schema >>
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "1 - create fixture tables"
+INFO o.f.c.internal.command.DbMigrate - Migrating schema "main" to version "2 - add revision"
+INFO o.f.c.internal.command.DbMigrate - Successfully applied 2 migrations to schema "main", now at version v2 (execution time 00:00.000s)
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-15 - Shutdown initiated...
+INFO c.zaxxer.hikari.HikariDataSource - HikariPool-15 - Shutdown completed.
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.642 s -- in cn.shiinapple.promptpractice.pocsqlite.DatabaseTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.5.1:jar (default-jar) @ poc-java-sqlite ---
+[INFO] Building jar: /work/target/poc-java-sqlite-0.1.0-SNAPSHOT.jar
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  5.723 s
+[INFO] Finished at: 2026-11-26T05:45:25Z
+[INFO] ------------------------------------------------------------------------
+low 0
+high 0
+max 0
+oom 0
+oom_kill 0
+oom_group_kill 0

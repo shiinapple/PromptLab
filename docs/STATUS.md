@@ -2,12 +2,12 @@
 
 ## 当前优先任务
 
-**POC-02 本机阶段待开始。** 用户确认继续后，从 [POC-02 验证标准](validation/POC-02.md)和[凭据与渲染设计](design/MODEL_INTEGRATION.md#浏览器凭据与渲染安全)入手。
+正式工程架构设计已整理待评审。确认后从 [M0-01](tasks/M0.md#m0-01初始化工程与依赖) 开始搭建，M0 仍为 TODO。当前无未完成的 PoC 阻塞 M0。[架构](design/ARCHITECTURE.md) · [路线图](ROADMAP.md)
 
-用虚构 Key 和受控 Mock 验证模型与平台请求的边界、Key 清理、地址切换、原文渲染和 CSP。优先检查本机可复现的行为，真实 HTTPS 的验证结果另列。证据写入对应的验证文件，同步 [TESTING 总览](TESTING.md) 的状态，再交付独立报告。
+POC-04 已在本机与 2 核、2 GiB Linux 容器各通过 10 项检查。目标主机和长业务负载进入上线验收。POC-03 主实验 108/108 已结项；T1/T2 为候选教学题，T3 保留本次端点观察。[POC-04](validation/POC-04.md#poc-04-执行记录) · [POC-03](validation/POC-03.md#归档与教学转化)
 
-## 待恢复
+## 按阶段恢复
 
-**POC-01 真实 HTTPS 阶段待环境和授权。** [本机 Mock 已通过](validation/POC-01.md#poc-01-执行记录)。取得测试站 Origin、首个网关的 Base URL 与版本、目标浏览器及短请求授权后，从真实站点验证 CORS、本地网络限制、模型列表、普通响应、SSE 和取消。[POC-01 验证标准](validation/POC-01.md)
-
-其他任务或术语通过 [文档索引](INDEX.md)定位。
+- M1 在判题、D0 任务中补 POC-05/06，M2 补普通与 SSE 的同原文回归。
+- POC-01/02 本机 Mock 分别为 34/34、11/11，正式前端在 M2 回归。真实 HTTPS 仍待目标环境和授权，进入 M6 上线验收，也可随 M2 联调提前完成。
+- 003 准备发布时做 POC-07。保留目前尚未执行的验证方案和全部历史证据。[验证总览](TESTING.md#验证门槛)

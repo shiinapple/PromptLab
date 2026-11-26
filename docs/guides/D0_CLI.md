@@ -1,6 +1,6 @@
 # D0 手动运行命令
 
-基本流程与导入约束见 [D0 设计](../design/MODEL_INTEGRATION.md#22-d0-手动运行)。跨平台验证见 [POC-05](../validation/POC-05.md)。
+基本流程与导入约束见 [D0 设计](../design/MODEL_INTEGRATION.md#22-d0-手动运行)。跨平台验证见 [POC-06](../validation/POC-06.md)。
 
 ## macOS / Linux Bash
 
