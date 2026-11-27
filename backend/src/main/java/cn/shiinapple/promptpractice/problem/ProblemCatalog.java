@@ -123,7 +123,7 @@ public class ProblemCatalog {
         }
     }
 
-    // Validate the closed subset used by the first pack. Full instance validation belongs to the judge.
+    // Validate the supported schema subset before passing it to the judge.
     private static void validateSchema(JsonNode schema, String path, boolean root) {
         require(schema.isObject(), path + " must be a schema object");
         Set<String> keys = new HashSet<>(schema.propertyNames());
@@ -139,10 +139,15 @@ public class ProblemCatalog {
                         path + " Invalid closed object schema");
                 JsonNode properties = schema.path("properties");
                 Set<String> required = strings(schema.path("required"), path + " Invalid required fields");
-                require(new HashSet<>(properties.propertyNames()).equals(required),
-                        path + " Required fields must match declared properties");
+                require(properties.propertyNames().containsAll(required),
+                        path + " Required fields must be declared in properties");
                 for (var property : properties.properties()) {
-                    validateSchema(property.getValue(), path + "/" + property.getKey(), false);
+                    String name = property.getKey();
+                    JsonNode child = property.getValue();
+                    if (child.isObject() && child.isEmpty() && !required.contains(name)) {
+                        continue;
+                    }
+                    validateSchema(child, path + "/" + name, false);
                 }
             }
             case "array" -> {
@@ -150,12 +155,16 @@ public class ProblemCatalog {
                 validateSchema(schema.path("items"), path + "/items", false);
             }
             case "integer", "boolean" -> require(keys.equals(Set.of("type")), path + " Invalid scalar schema");
+            case "string" -> require(keys.equals(Set.of("type"))
+                            || keys.equals(Set.of("type", "pattern"))
+                            && "\\S".equals(schema.path("pattern").stringValue(null)),
+                    path + " Invalid string schema");
             default -> throw new IllegalArgumentException(path + " Unsupported schema type");
         }
     }
 
     private static void validateExpectations(String base, JsonNode assertions, JsonNode fixtures) {
-        require(assertions.isArray() && !assertions.isEmpty(), base + "Missing case assertions");
+        require(assertions.isArray(), base + "Missing case assertions");
         Set<String> assertionIds = new HashSet<>();
         for (JsonNode assertion : assertions) {
             require(nonBlank(assertion.path("id")) && assertionIds.add(assertion.path("id").stringValue())

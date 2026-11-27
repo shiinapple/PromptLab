@@ -3,11 +3,13 @@ package cn.shiinapple.promptpractice.judge;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
@@ -23,6 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class JudgeService {
     public static final int MAX_OUTPUT_BYTES = 256 * 1024;
     private static final int MAX_NUMBER_LENGTH = 128;
+    private static final Pattern NON_WHITESPACE = Pattern.compile("\\S", Pattern.UNICODE_CHARACTER_CLASS);
     private static final JsonMapper JSON = JsonMapper.builder(JsonFactory.builder()
                     .streamReadConstraints(StreamReadConstraints.builder()
                             .maxNestingDepth(64).maxNumberLength(MAX_NUMBER_LENGTH)
@@ -71,30 +74,44 @@ public class JudgeService {
                 ? "PASSED" : "WRONG_ANSWER", List.copyOf(checks));
     }
 
-    // This matches the object, array, integer and boolean vocabulary accepted by ProblemCatalog.
+    // ProblemCatalog accepts an empty schema only for optional object properties.
     private static Check validate(JsonNode value, JsonNode schema, String path) {
+        if (schema.isObject() && schema.isEmpty()) {
+            return null;
+        }
         String type = schema.path("type").stringValue();
         boolean validType = switch (type) {
             case "object" -> value.isObject();
             case "array" -> value.isArray();
             case "integer" -> value.isIntegralNumber() || value.isBigDecimal() && isWhole(value.decimalValue());
             case "boolean" -> value.isBoolean();
+            case "string" -> value.isString();
             default -> throw new IllegalStateException("Unregistered schema type");
         };
         if (!validType) {
             return new Check("schema", path, "FAIL", "TYPE", type, value.getNodeType().name());
         }
+        if (value.isString() && schema.has("pattern") && !NON_WHITESPACE.matcher(value.stringValue()).find()) {
+            return new Check("schema", path, "FAIL", "BLANK", NON_WHITESPACE.pattern(), Map.of());
+        }
         if (value.isObject()) {
             var properties = schema.path("properties");
+            var required = new HashSet<String>();
             for (var keyNode : schema.path("required")) {
-                String key = keyNode.stringValue();
+                required.add(keyNode.stringValue());
+            }
+            for (var property : properties.properties()) {
+                String key = property.getKey();
                 if (!value.has(key)) {
-                    return new Check("schema", path + "/" + key, "FAIL", "REQUIRED", key, Map.of());
+                    if (required.contains(key)) {
+                        return new Check("schema", path + "/" + key, "FAIL", "REQUIRED", key, Map.of());
+                    }
+                    continue;
                 }
-                Check child = validate(value.path(key), properties.path(key), path + "/" + key);
+                Check child = validate(value.path(key), property.getValue(), path + "/" + key);
                 if (child != null) return child;
             }
-            if (value.size() != properties.size()) {
+            if (!properties.propertyNames().containsAll(value.propertyNames())) {
                 return new Check("schema", path, "FAIL", "EXTRA_FIELD", properties.propertyNames(), value.size());
             }
         }

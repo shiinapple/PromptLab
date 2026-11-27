@@ -12,12 +12,25 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.core.io.DefaultResourceLoader;
 
 import cn.shiinapple.promptpractice.problem.ProblemCatalog;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 class JudgeServiceTest {
     private static final ProblemCatalog.ProblemPack PACK =
             new ProblemCatalog(new DefaultResourceLoader()).loadPublished("002");
     private static final JudgeService JUDGE = new JudgeService();
     private static final String VALID = PACK.fixtures().path(0).path("rawOutput").stringValue();
+    private static final JsonMapper JSON = JsonMapper.shared();
+    private static final JsonNode NO_ASSERTIONS = JSON.readTree("[]");
+    private static final JsonNode OPTIONAL_BOOLEAN_SCHEMA = JSON.readTree("""
+            {"type":"object","required":["a"],"additionalProperties":false,
+             "properties":{"a":{"type":"integer"},"b":{"type":"boolean"}}}
+            """);
+    private static final JsonNode STRING_SCHEMA = JSON.readTree("""
+            {"type":"object","required":["reply"],"additionalProperties":false,
+             "properties":{"reply":{"type":"string","pattern":"\\\\S"},
+                           "name":{"type":"string"},"in_character":{}}}
+            """);
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("publishedCases")
@@ -65,6 +78,60 @@ class JudgeServiceTest {
                 Arguments.of("extra boundary", VALID.replace(":13,", ":14,"), "WRONG_ANSWER"),
                 Arguments.of("large integer", VALID.replace(":13,", ":1e1000000,"), "WRONG_ANSWER")
         );
+    }
+
+    @ParameterizedTest
+    @MethodSource("optionalBooleanCases")
+    void validatesDeclaredFieldsAndRejectsUndeclaredNames(String raw, String code, String path) {
+        assertStructureResult(raw, OPTIONAL_BOOLEAN_SCHEMA, code, path);
+    }
+
+    static Stream<Arguments> optionalBooleanCases() {
+        return Stream.of(
+                Arguments.of("{\"a\":1}", "", ""),
+                Arguments.of("{\"a\":1,\"b\":\"not-bool\"}", "TYPE", "/b"),
+                Arguments.of("{\"a\":1,\"zzz\":2}", "EXTRA_FIELD", "")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("stringCases")
+    void checksStringTypeAndUnicodeNonWhitespace(String raw, String code, String path) {
+        assertStructureResult(raw, STRING_SCHEMA, code, path);
+    }
+
+    static Stream<Arguments> stringCases() {
+        return Stream.of(
+                Arguments.of("{}", "REQUIRED", "/reply"),
+                Arguments.of("{\"reply\":42}", "TYPE", "/reply"),
+                Arguments.of("{\"reply\":\"\"}", "BLANK", "/reply"),
+                Arguments.of("{\"reply\":\" \\t\\n\"}", "BLANK", "/reply"),
+                Arguments.of("{\"reply\":\"\u3000\"}", "BLANK", "/reply"),
+                Arguments.of("{\"reply\":\"\u00A0\"}", "BLANK", "/reply"),
+                Arguments.of("{\"reply\":\"\u3000守夜人 \"}", "", ""),
+                Arguments.of("{\"reply\":\"yes\",\"name\":\"\"}", "", ""),
+                Arguments.of("{\"reply\":\"yes\",\"name\":null}", "TYPE", "/name")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("unconstrainedValues")
+    void acceptsAnyJsonTypeForAnOptionalEmptySchema(String value) {
+        assertStructureResult("{\"reply\":\"yes\",\"in_character\":" + value + "}", STRING_SCHEMA, "", "");
+    }
+
+    static Stream<String> unconstrainedValues() {
+        return Stream.of("null", "true", "123.5", "\"\"", "[1,false]", "{\"anything\":0}");
+    }
+
+    private static void assertStructureResult(String raw, JsonNode schema, String code, String path) {
+        var result = JUDGE.judge(raw, schema, NO_ASSERTIONS);
+        assertThat(result.verdict()).isEqualTo(code.isEmpty() ? "PASSED" : "FORMAT_ERROR");
+        assertThat(result.checks()).extracting(JudgeService.Check::id).containsExactly("json", "schema");
+        var schemaCheck = result.checks().get(1);
+        assertThat(schemaCheck.status()).isEqualTo(code.isEmpty() ? "PASS" : "FAIL");
+        assertThat(schemaCheck.code()).isEqualTo(code);
+        assertThat(schemaCheck.path()).isEqualTo(path);
     }
 
     @ParameterizedTest(name = "{0}")
