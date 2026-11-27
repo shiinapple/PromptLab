@@ -12,6 +12,7 @@ defineProps<{
   mode: RunMode
   connection: ConnectionProfile | undefined
   busy: boolean
+  historical: boolean
   settingsOpen: boolean
   hasRun: boolean
 }>()
@@ -45,7 +46,7 @@ const prompt = defineModel<string>({ required: true })
     <div class="actions">
       <button type="button" @click="$emit('restore')">{{ t('恢复模板', 'Restore template') }}</button>
       <button class="primary" type="button"
-        :disabled="!!preview.error || busy || (mode === 'DIRECT' && (settingsOpen || !connection || !validModel(connection.model)))"
+        :disabled="historical || !!preview.error || busy || (mode === 'DIRECT' && (settingsOpen || !connection || !validModel(connection.model)))"
         @click="$emit('run')">
         {{ mode === 'DIRECT' ? t('运行并判题', 'Run and grade')
           : hasRun ? t('新建运行', 'New run') : t('创建运行', 'Create run') }}

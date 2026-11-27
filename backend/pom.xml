@@ -63,6 +63,7 @@
                 <targetPath>content/problems</targetPath>
                 <includes>
                     <include>releases.json</include>
+                    <include>hashes.json</include>
                     <include>*/v*/**/*.json</include>
                 </includes>
             </resource>

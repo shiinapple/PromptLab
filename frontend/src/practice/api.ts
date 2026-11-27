@@ -13,6 +13,7 @@ export type ProblemSummary = {
 export type Problem = MessagePlan & {
   problemId: string
   version: number
+  publishedVersion: number
   title: string
   description: string
   defaultSlots: Record<string, string>
@@ -83,8 +84,11 @@ async function post<T>(path: string, body: unknown, key?: string) {
 
 type Locale = 'zh-CN' | 'en'
 export const readProblems = (locale: Locale) => getJson<{ items: ProblemSummary[] }>(`/api/problems?locale=${locale}`)
-export const readProblem = (id: string, locale: Locale) =>
-  getJson<Problem>(`/api/problems/${encodeURIComponent(id)}?locale=${locale}`)
+export function readProblem(id: string, locale: Locale, version?: number) {
+  const params = new URLSearchParams({ locale })
+  if (version !== undefined) params.set('version', String(version))
+  return getJson<Problem>(`/api/problems/${encodeURIComponent(id)}?${params}`)
+}
 export const readRun = (id: string) => getJson<Run>(`/api/runs/${encodeURIComponent(id)}`)
 
 export function createRun(problem: Problem, caseId: string, text: string, mode: RunMode, key: string) {

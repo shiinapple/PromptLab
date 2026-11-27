@@ -250,3 +250,5 @@ content/problems/
 - `assertions` 字段必填，可以是 `[]`，表示只判 JSON 与结构。
 
 **版本**：发布过的版本目录不再修改。增删用例、改题面或规则都新建版本。`content/problems/hashes.json` 记录每个版本的内容摘要，供测试核对；它和 `releases.json` 一样不参与摘要计算。单用例题包的摘要算法与现在一致。
+
+`hashes.json` 以题号和十进制版本号为两层键，值为 SHA-256 小写十六进制摘要。构建测试核对版本目录与清单是否一一对应，并校验每个目录只含当前题包子集支持的文件。每个版本至少有一条通过 fixture 和一条失败 fixture。fixture 的 `failedCheckIds` 列出失败业务断言的 ID，JSON 解析或结构错误通过 `FORMAT_ERROR` 校验。

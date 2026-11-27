@@ -1,6 +1,7 @@
 package cn.shiinapple.promptpractice.practice;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -72,12 +73,15 @@ class PracticeController {
 
     @GetMapping("/api/problems/{id}")
     ResponseEntity<?> problem(HttpServletRequest request, @PathVariable String id,
-            @RequestParam(defaultValue = "zh-CN") String locale) throws IOException {
+            @RequestParam(defaultValue = "zh-CN") String locale,
+            @RequestParam(name = "version", required = false) String version) throws IOException {
         local(request);
-        var pack = catalog.loadPublished(id);
+        var published = catalog.readPublished(id, problemVersion(version));
+        var pack = published.pack();
         var text = localized(pack, locale);
         return ok(Map.of(
-                "problemId", pack.problemId(), "version", pack.version(), "locale", locale,
+                "problemId", pack.problemId(), "version", pack.version(), "publishedVersion", published.publishedVersion(),
+                "locale", locale,
                 "title", text.path("title"), "description", text.path("description"),
                 "defaultSlots", text.path("defaultSlots"), "slots", pack.problem().path("slots"),
                 "messages", pack.problem().path("messages"),
@@ -195,6 +199,15 @@ class PracticeController {
         }
         if (!StandardCharsets.UTF_8.newEncoder().canEncode(text)) throw new PracticeError(400, "INVALID_JSON");
         return text;
+    }
+
+    private static Integer problemVersion(String value) {
+        if (value == null) return null;
+        if (!value.matches("[0-9]+")) throw new PracticeError(400, "INVALID_REQUEST");
+        BigInteger version = new BigInteger(value);
+        if (version.signum() == 0) throw new PracticeError(400, "INVALID_REQUEST");
+        if (version.bitLength() > 31) throw new PracticeError(404, "RESOURCE_NOT_FOUND");
+        return version.intValue();
     }
 
     private static JsonNode localized(ProblemCatalog.ProblemPack pack, String locale) {

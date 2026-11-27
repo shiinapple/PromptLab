@@ -528,6 +528,39 @@ try {
       await send('Fetch.disable')
     }
   }
+  // Simulate a newer published version before M3-05 adds one to the real catalog.
+  const v1 = await (await fetch(`${origin}/api/problems/002?version=1`)).json()
+  const servedVersions = []
+  const simulateRelease = async ({ data }) => {
+    const { method, params } = JSON.parse(data)
+    if (method !== 'Fetch.requestPaused') return
+    const version = new URL(params.request.url).searchParams.get('version')
+    servedVersions.push(version)
+    const problem = version === '1' ? v1 : { ...v1, title: '新版题面', version: 2 }
+    await send('Fetch.fulfillRequest', {
+      requestId: params.requestId, responseCode: 200,
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+      body: Buffer.from(JSON.stringify({ ...problem, publishedVersion: 2 })).toString('base64'),
+    })
+  }
+  socket.addEventListener('message', simulateRelease)
+  await send('Fetch.enable', { patterns: [{ urlPattern: `${origin}/api/problems/002?*` }] })
+  try {
+    await send('Page.navigate', { url: `${origin}/?problem=001&run=${firstRun}` })
+    await waitFor("document.body.textContent.includes('旧版本')", 'restored historical problem')
+    assert.equal(await page("document.querySelector('h1').textContent"), v1.title)
+    assert.equal(await page("document.querySelector('button.primary').disabled"), true)
+    assert.match(await page("document.querySelector('#run-id').textContent"), /^002 · v1 · case-1/)
+    await clickText('切回当前版本')
+    await waitFor("document.querySelector('h1')?.textContent === '新版题面'", 'switch to current version')
+    assert.deepEqual(servedVersions, ['1', null])
+    assert.equal(await page('new URL(location.href).searchParams.has("run")'), false)
+  } finally {
+    socket.removeEventListener('message', simulateRelease)
+    await send('Fetch.disable')
+  }
+  console.log('PASS historical run reads its exact problem version and can return to the current version')
+
   await checkHttpsMatching(true, origin)
   const fixedPort = await freePort()
   const fixed = 'http://127.0.0.1:' + fixedPort

@@ -140,6 +140,25 @@ class PracticeIntegrationTest {
     }
 
     @Test
+    void exposesPublishedVersionAndChecksRequestedVersions() throws Exception {
+        var current = get("/api/problems/002");
+        assertThat(current.body().path("publishedVersion").intValue())
+                .isEqualTo(current.body().path("version").intValue());
+        assertThat(get("/api/problems/002?version=" + current.body().path("version").intValue()).body())
+                .isEqualTo(current.body());
+        for (String version : new String[]{"3", "2147483648"}) {
+            var missing = get("/api/problems/002?version=" + version);
+            assertThat(missing.status()).isEqualTo(404);
+            assertThat(missing.body().path("code").stringValue()).isEqualTo("RESOURCE_NOT_FOUND");
+        }
+        for (String version : new String[]{"", "0", "-1", "1.0", "bad"}) {
+            var invalid = get("/api/problems/002?version=" + version);
+            assertThat(invalid.status()).isEqualTo(400);
+            assertThat(invalid.body().path("code").stringValue()).isEqualTo("INVALID_REQUEST");
+        }
+    }
+
+    @Test
     void usesTheExistingRunContractForDirectMode() throws Exception {
         String key = UUID.randomUUID().toString();
         var direct = new java.util.HashMap<>(createBody("{{requirement}}"));

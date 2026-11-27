@@ -32,6 +32,7 @@ export function usePractice() {
   let retry: { body: string; key: string } | undefined
 
   const publicCase = computed(() => problem.value?.cases[0])
+  const historical = computed(() => !!problem.value && problem.value.version < problem.value.publishedVersion)
   const slot = computed(() => problem.value && editableSlot(problem.value))
   const preview = computed(() => {
     if (!problem.value || !publicCase.value || !slot.value) return {}
@@ -60,9 +61,9 @@ export function usePractice() {
   }
 
   function displayProblem(data: Problem) {
-    if (problem.value) drafts.set(problem.value.problemId, prompt.value)
+    if (problem.value) drafts.set(`${problem.value.problemId}/${problem.value.version}`, prompt.value)
     problem.value = data
-    prompt.value = drafts.get(data.problemId) ?? data.defaultSlots[editableSlot(data).name]
+    prompt.value = drafts.get(`${data.problemId}/${data.version}`) ?? data.defaultSlots[editableSlot(data).name]
   }
 
   async function load() {
@@ -75,7 +76,7 @@ export function usePractice() {
       problems.value = list.items
       const id = restored?.problemId ?? url.searchParams.get('problem') ?? problems.value[0]?.problemId
       if (!id) throw new Error(t('没有可用题目。', 'No problems available.'))
-      const data = await readProblem(id, locale)
+      const data = await readProblem(id, locale, restored?.version)
       displayProblem(data)
       if (restored) {
         run.value = restored
@@ -90,7 +91,7 @@ export function usePractice() {
   }
 
   async function selectProblem(id: string) {
-    if (loading.value || id === problem.value?.problemId) return
+    if (loading.value || (id === problem.value?.problemId && !historical.value)) return
     loading.value = true
     feedback.clear()
     try {
@@ -127,7 +128,7 @@ export function usePractice() {
   }
 
   async function freeze() {
-    if (loading.value || !problem.value || !publicCase.value || !preview.value.messages || feedback.busy.value) return
+    if (loading.value || historical.value || !problem.value || !publicCase.value || !preview.value.messages || feedback.busy.value) return
     // await 之后页面状态可能已经变了，先把本次要用的值固定下来。
     const selected = problem.value
     const caseId = publicCase.value.caseId
@@ -176,7 +177,7 @@ export function usePractice() {
 
   return {
     model, feedback, direct, manual,
-    problems, problem, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
+    problems, problem, historical, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
     load, selectProblem, setMode, freeze, copyText, download,
   }
 }

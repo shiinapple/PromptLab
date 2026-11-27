@@ -59,6 +59,33 @@ class ProblemCatalogTest {
     }
 
     @Test
+    void readsPreviousVersionsAndRejectsGapsInTheReleaseHistory() {
+        var catalog = new ProblemCatalog(new DefaultResourceLoader() {
+            @Override
+            public Resource getResource(String location) {
+                if ("classpath:/content/problems/releases.json".equals(location)) {
+                    return new ByteArrayResource("{\"002\":3}".getBytes(StandardCharsets.UTF_8));
+                }
+                if (location.startsWith("classpath:/content/problems/002/v2/")) {
+                    return new ByteArrayResource(new byte[0]) {
+                        @Override
+                        public boolean exists() {
+                            return false;
+                        }
+                    };
+                }
+                return super.getResource(location);
+            }
+        });
+
+        var previous = catalog.readPublished("002", 1);
+        assertThat(previous.publishedVersion()).isEqualTo(3);
+        assertThat(previous.pack().version()).isEqualTo(1);
+        assertThatThrownBy(() -> catalog.readPublished("002", 2)).isInstanceOf(ProblemCatalog.UnknownProblem.class);
+        assertThatThrownBy(() -> catalog.readPublished("002", 4)).isInstanceOf(ProblemCatalog.UnknownProblem.class);
+    }
+
+    @Test
     void rejectsACaseWithAMissingVariable() {
         var catalog = withReplacement("cases/case-1.json", """
                 {"caseId":"case-1","inputLocale":"zh-CN","variables":{}}

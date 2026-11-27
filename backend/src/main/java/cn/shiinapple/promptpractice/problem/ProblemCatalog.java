@@ -47,9 +47,19 @@ public class ProblemCatalog {
     }
 
     public ProblemPack loadPublished(String problemId) {
-        Integer version = problemId == null ? null : releases().get(problemId);
-        if (version == null) throw new UnknownProblem(problemId);
-        return loadVersion(problemId, version);
+        return readPublished(problemId, null).pack();
+    }
+
+    public PublishedProblem readPublished(String problemId, Integer requestedVersion) {
+        Integer publishedVersion = problemId == null ? null : releases().get(problemId);
+        if (publishedVersion == null) throw new UnknownProblem(problemId);
+        int version = requestedVersion == null ? publishedVersion : requestedVersion;
+        if (version > publishedVersion
+                || version < publishedVersion && !resources.getResource(
+                        ROOT + problemId + "/v" + version + "/problem.json").exists()) {
+            throw new UnknownProblem(problemId + "/v" + version);
+        }
+        return new PublishedProblem(loadVersion(problemId, version), publishedVersion);
     }
 
     private Map<String, Integer> releases() {
@@ -279,6 +289,9 @@ public class ProblemCatalog {
         UnknownProblem(String id) {
             super("Missing release for " + id);
         }
+    }
+
+    public record PublishedProblem(ProblemPack pack, int publishedVersion) {
     }
 
     public record ProblemPack(

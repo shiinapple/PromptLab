@@ -15,7 +15,7 @@ const {
   feedback: { busy, error, notice, action },
   direct: { text: directText, stage, seconds, pending, save, stop },
   manual: { raw, confirmed, edit, importFile, grade },
-  problems, problem, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
+  problems, problem, historical, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
   load, selectProblem, setMode, freeze, copyText, download,
 } = usePractice()
 
@@ -48,11 +48,12 @@ const failed = computed(() => run.value?.status === 'FAILED'
       </button>
     </nav>
     <div v-if="problem && publicCase" class="workspace">
-      <ProblemPanel :problem="problem" :public-case="publicCase" />
+      <ProblemPanel :problem="problem" :public-case="publicCase" :historical="historical" :loading="loading"
+        @current="selectProblem(problem.problemId)" />
 
       <div class="activity">
         <PromptPanel v-model="prompt" :role="slot?.role" :preview="preview" :mode="mode" :connection="connection" :busy="busy || loading"
-          :settings-open="settingsOpen" :has-run="!!run" @update:mode="setMode"
+          :settings-open="settingsOpen" :historical="historical" :has-run="!!run" @update:mode="setMode"
           @restore="restoreTemplate" @configure="settingsOpen = true" @run="freeze" />
 
         <section v-if="run" class="panel" aria-labelledby="run-heading">
@@ -63,7 +64,7 @@ const failed = computed(() => run.value?.status === 'FAILED'
               {{ title }}
             </span>
           </div>
-          <p class="meta" id="run-id">{{ run.problemId }} · {{ run.caseId }} · {{ run.runId }}</p>
+          <p class="meta" id="run-id">{{ run.problemId }} · v{{ run.version }} · {{ run.caseId }} · {{ run.runId }}</p>
           <p v-if="run.mode === 'DIRECT' && run.reported" class="meta">
             {{ run.reported.modelId }} · {{ run.reported.durationMs }} ms
           </p>
@@ -71,7 +72,7 @@ const failed = computed(() => run.value?.status === 'FAILED'
             <summary>{{ t('冻结请求', 'Frozen request') }}</summary>
             <pre id="frozen-request">{{ requestJson }}</pre>
           </details>
-          <p v-if="snapshotDraft !== undefined && problem.problemId === run.problemId && prompt !== snapshotDraft" class="help">
+          <p v-if="snapshotDraft !== undefined && problem.problemId === run.problemId && problem.version === run.version && prompt !== snapshotDraft" class="help">
             {{ t('当前草稿有改动，本次运行仍使用冻结的请求。', 'The draft has changed. This run uses the frozen request.') }}
           </p>
           <DirectRunSection v-if="run.mode === 'DIRECT'" :run="run" :selected-mode="mode" :busy="busy" :error="error"
