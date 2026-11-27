@@ -23,7 +23,9 @@ class ApiErrors {
         var detail = ProblemDetail.forStatus(error.status);
         detail.setType(URI.create("about:blank"));
         detail.setProperty("code", error.code);
-        detail.setProperty("messageKey", "errors." + error.code);
+        detail.setProperty("messageKey", error.code.equals("DRAFT_REVISION_CONFLICT")
+                ? "errors.draftRevisionConflict" : "errors." + error.code);
+        if (!error.details.isEmpty()) detail.setProperty("details", error.details);
         detail.setProperty("requestId", UUID.randomUUID().toString());
         return ResponseEntity.status(error.status).cacheControl(CacheControl.noStore())
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON).body(detail);

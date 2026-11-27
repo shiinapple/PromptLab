@@ -47,6 +47,27 @@ public class ProblemCatalog {
                 .toList();
     }
 
+    public List<ProblemPack> loadReleasedVersions() {
+        var releases = releases();
+        var hashes = read("hashes.json", new TreeMap<>());
+        var packs = new ArrayList<ProblemPack>();
+        for (var release : releases.entrySet()) {
+            String id = release.getKey();
+            var versions = hashes.path(id);
+            for (var entry : versions.properties()) {
+                int version = Integer.parseInt(entry.getKey());
+                if (version > release.getValue()) continue;
+                var pack = loadVersion(id, version);
+                require(pack.contentHash().equals(entry.getValue().stringValue(null)),
+                        "Problem bytes do not match catalog: " + id + "/v" + version);
+                packs.add(pack);
+            }
+            require(packs.stream().anyMatch(pack -> pack.problemId().equals(id) && pack.version() == release.getValue()),
+                    "Missing release hash: " + id);
+        }
+        return List.copyOf(packs);
+    }
+
     public ProblemPack loadPublished(String problemId) {
         return readPublished(problemId, null).pack();
     }

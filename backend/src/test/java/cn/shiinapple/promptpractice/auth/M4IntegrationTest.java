@@ -9,6 +9,8 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import cn.shiinapple.promptpractice.practice.PracticeError;
 import org.junit.jupiter.api.Test;
@@ -85,6 +87,84 @@ class M4IntegrationTest {
         var wrong = Map.of("email", enabled.email, "password", UUID.randomUUID().toString());
         for (int attempt = 0; attempt < 8; attempt++) assertCredentialFailure(anonymous, wrong);
         assertEquals(429, send("POST", "/api/auth/login", anonymous.cookie, anonymous.token, wrong).status);
+    }
+
+    @Test
+    void settingsPatchMergesAllowedFieldsAndKeepsAccountsSeparate() throws Exception {
+        var a = login(createUser());
+        var b = login(createUser());
+        assertEquals("zh-CN", get("/api/settings", a).body.path("locale").asText());
+        assertEquals(403, send("PATCH", "/api/settings", a.cookie, null, Map.of("locale", "en")).status);
+        assertEquals(400, write("PATCH", "/api/settings", a, Map.of("editorPrefs", Map.of("secret", "no"))).status);
+        assertEquals(400, write("PATCH", "/api/settings", a, Map.of("locale", "fr")).status);
+        assertEquals(400, write("PATCH", "/api/settings", a, Map.of("editorPrefs", Map.of("wordWrap", "true"))).status);
+        var saved = write("PATCH", "/api/settings", a, Map.of("locale", "en", "editorPrefs", Map.of("fontSize", 18)));
+        assertEquals(200, saved.status);
+        assertEquals("en", saved.body.path("locale").asText());
+        assertEquals(18, saved.body.path("editorPrefs").path("fontSize").asInt());
+        var merged = write("PATCH", "/api/settings", a, Map.of("editorPrefs", Map.of("wordWrap", true)));
+        assertEquals(18, merged.body.path("editorPrefs").path("fontSize").asInt());
+        assertTrue(merged.body.path("editorPrefs").path("wordWrap").asBoolean());
+        assertEquals("zh-CN", get("/api/settings", b).body.path("locale").asText());
+        assertEquals(404, get("/api/users/" + get("/api/me", a).body.path("userId").asText() + "/settings", b).status);
+    }
+
+    @Test
+    void draftsPersistPerOwnerAndVersionAndCanBeCopiedWithPut() throws Exception {
+        var user = createUser();
+        var a = login(user);
+        var b = login(createUser());
+        String path = "/api/problems/002/draft";
+        assertTrue(get(path, a).body.path("draft").isNull());
+        assertEquals(201, write("PUT", path, a, draftBody(1, 0, "old text")).status);
+        assertTrue(get(path, a).body.path("draft").isNull());
+        var old = get(path + "?version=1", a).body.path("draft");
+        assertEquals("old text", old.path("slots").path("user").asText());
+        assertEquals(201, write("PUT", path, a, draftBody(2, 0, old.path("slots").path("user").asText())).status);
+        assertEquals(200, write("PUT", path, a, draftBody(2, 1, "")).status);
+        var conflict = write("PUT", path, a, draftBody(2, 1, "stale"));
+        assertEquals(409, conflict.status);
+        assertEquals(2, conflict.body.path("details").path("serverRevision").asLong());
+        assertEquals(2, get(path, login(user)).body.path("draft").path("revision").asLong());
+        assertTrue(get(path + "?version=1", b).body.path("draft").isNull());
+        assertEquals(409, write("PUT", path, b, draftBody(2, 2, "attempt")).status);
+        assertEquals(201, write("PUT", path, b, draftBody(2, 0, "other owner's text")).status);
+        assertEquals("", get(path, a).body.path("draft").path("slots").path("user").asText());
+        assertEquals("old text", get(path + "?version=1", a).body.path("draft").path("slots").path("user").asText());
+    }
+
+    @Test
+    void onlyOneConcurrentDraftWriterWithTheSameRevisionSucceeds() throws Exception {
+        var session = login(createUser());
+        String path = "/api/problems/002/draft";
+        assertEquals(201, write("PUT", path, session, draftBody(1, 0, "initial")).status);
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            var one = workers.submit(() -> write("PUT", path, session, draftBody(1, 1, "one")));
+            var two = workers.submit(() -> write("PUT", path, session, draftBody(1, 1, "two")));
+            var left = one.get(6, TimeUnit.SECONDS);
+            var right = two.get(6, TimeUnit.SECONDS);
+            assertEquals(java.util.Set.of(200, 409), java.util.Set.of(left.status, right.status));
+            assertEquals(2, (left.status == 409 ? left : right).body.path("details").path("serverRevision").asLong());
+        }
+    }
+
+    private Session login(User user) throws Exception {
+        var anonymous = csrf(null);
+        var reply = send("POST", "/api/auth/login", anonymous.cookie, anonymous.token, user.credentials());
+        assertEquals(204, reply.status);
+        return csrf(reply.cookie());
+    }
+
+    private Reply get(String path, Session session) throws Exception {
+        return send("GET", path, session.cookie, null, null);
+    }
+
+    private Reply write(String method, String path, Session session, Object body) throws Exception {
+        return send(method, path, session.cookie, session.token, body);
+    }
+
+    private Map<String, Object> draftBody(int version, long revision, String text) {
+        return Map.of("version", version, "revision", revision, "caseId", "case-1", "slots", Map.of("user", text));
     }
 
     private void assertCredentialFailure(Session session, Map<String, String> body) throws Exception {

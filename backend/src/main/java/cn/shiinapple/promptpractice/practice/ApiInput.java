@@ -48,6 +48,13 @@ public final class ApiInput {
         return text;
     }
 
+    public static int integer(JsonNode node, int min, int max) {
+        if (!node.isIntegralNumber() || !node.canConvertToInt() || node.intValue() < min || node.intValue() > max) {
+            throw new PracticeError(400, "INVALID_REQUEST");
+        }
+        return node.intValue();
+    }
+
     public static Integer problemVersion(String value) {
         if (value == null) return null;
         if (!value.matches("[0-9]+")) throw new PracticeError(400, "INVALID_REQUEST");

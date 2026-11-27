@@ -86,12 +86,21 @@ public class PracticeRuns implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        var packs = catalog.loadPublished();
+        var packs = catalog.loadReleasedVersions();
         inWrite(() -> {
             long now = clock.millis();
             if (localOwner != null) {
                 jdbc.sql("INSERT INTO users(id, created_at) VALUES (:owner, :now) ON CONFLICT DO NOTHING")
                         .param("owner", localOwner).param("now", now).update();
+            }
+            var registered = jdbc.sql("SELECT problem_id, version, content_hash FROM problem_versions")
+                    .query((row, index) -> new RegisteredVersion(row.getString(1), row.getInt(2), row.getString(3)))
+                    .list();
+            for (var version : registered) {
+                if (packs.stream().noneMatch(pack -> version.id().equals(pack.problemId())
+                        && version.version() == pack.version() && version.hash().equals(pack.contentHash()))) {
+                    throw new IllegalStateException("Previously registered problem version is unavailable or changed");
+                }
             }
             for (var pack : packs) {
                 jdbc.sql("""
@@ -269,6 +278,8 @@ public class PracticeRuns implements ApplicationRunner {
             throw new IllegalStateException(error);
         }
     }
+
+    private record RegisteredVersion(String id, int version, String hash) {}
 
     record Create(String problemId, int version, String caseId, String mode, Map<String, String> slots) {
     }
