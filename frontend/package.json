@@ -10,12 +10,15 @@
     "dev": "vite",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "test:e2e": "node test/practice.e2e.mjs",
+    "test:accounts": "node test/accounts.e2e.mjs",
+    "test:m5": "node test/accounts.e2e.mjs --m5",
     "typecheck": "vue-tsc --noEmit",
     "build": "vite build"
   },
   "dependencies": {
     "eventsource-parser": "3.0.8",
-    "vue": "3.5.46"
+    "vue": "3.5.46",
+    "vue-i18n": "11.4.24"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "6.0.11",

@@ -2,6 +2,7 @@ package cn.shiinapple.promptpractice.practice;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doReturn;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -13,6 +14,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -32,6 +34,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import cn.shiinapple.promptpractice.judge.JudgeService;
@@ -51,7 +54,7 @@ class PracticeIntegrationTest {
     DataSource data;
     @Autowired
     PlatformTransactionManager transactionManager;
-    @Autowired
+    @MockitoSpyBean
     ProblemCatalog catalog;
     @Autowired
     JudgeService judge;
@@ -74,21 +77,25 @@ class PracticeIntegrationTest {
         var english = get("/api/problems/002?locale=en").body();
         var chinese = get("/api/problems/002").body();
         assertThat(english.path("title").stringValue()).isEqualTo("Requirements to Test Cases");
+        assertThat(chinese.path("locale").stringValue()).isEqualTo("zh-CN");
         assertThat(english.at("/cases/0/variables")).isEqualTo(chinese.at("/cases/0/variables"));
         assertThat(english.toString()).doesNotContain("assertions", "boundary-mapping", "schema");
-        assertThat(get("/api/problems").body().at("/items/0/problemId").stringValue()).isEqualTo("002");
+        assertThat(get("/api/problems").body().at("/items/1/problemId").stringValue()).isEqualTo("002");
+        assertThat(get("/api/problems").body()).isEqualTo(get("/api/problems?locale=zh-CN").body());
         String key = UUID.randomUUID().toString();
         var original = create(key, "查看：{{requirement}}");
         assertThat(original.status()).isEqualTo(201);
         String id = id(original);
         assertThat(original.location()).isEqualTo("/api/runs/" + id);
-        assertThat(create(key, "查看：{{requirement}}").status()).isEqualTo(200);
+        var replay = create(key, "查看：{{requirement}}");
+        assertThat(replay.status()).isEqualTo(200);
+        assertThat(replay.body()).isEqualTo(original.body());
         assertThat(create(key, "另一个 Prompt {{requirement}}").body().path("code").stringValue())
                 .isEqualTo("IDEMPOTENCY_CONFLICT");
         var next = create(UUID.randomUUID().toString(), "另一个 Prompt {{requirement}}");
         assertThat(id(next)).isNotEqualTo(id);
 
-        String raw = " \r\n" + catalog.loadPublished("002").fixtures().path(0).path("rawOutput").stringValue() + "\t\n";
+        String raw = " \r\n" + catalog.loadPublished("002").findCase("case-1").fixtures().path(0).path("rawOutput").stringValue() + "\t\n";
         var result = complete(id, raw);
         assertThat(result.status()).isEqualTo(200);
         assertThat(result.body().path("verdict").stringValue()).isEqualTo("PASSED");
@@ -98,6 +105,135 @@ class PracticeIntegrationTest {
         assertThat(reloaded.path("rawOutput").stringValue()).isEqualTo(raw);
         assertThat(reloaded.path("messages")).isEqualTo(original.body().path("messages"));
         assertThat(next.body().path("messages")).isNotEqualTo(reloaded.path("messages"));
+    }
+
+    @Test
+    void rejectsInvalidLocalesOnBothProblemEndpoints() throws Exception {
+        for (String path : List.of("/api/problems", "/api/problems/002")) {
+            for (String locale : List.of("", "fr", "EN", "%20en")) {
+                String url = path + "?locale=" + locale;
+                var response = get(url);
+                assertThat(response.status()).as(url).isEqualTo(400);
+                assertThat(response.body().path("code").stringValue()).as(url).isEqualTo("INVALID_LOCALE");
+            }
+        }
+    }
+
+    @Test
+    void validatesLocaleWhenNoProblemsArePublished() throws Exception {
+        doReturn(List.of()).when(catalog).loadPublished();
+        var response = get("/api/problems");
+        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.body().path("items").isArray()).isTrue();
+        assertThat(response.body().path("items")).isEmpty();
+
+        for (String locale : List.of("", "fr")) {
+            String url = "/api/problems?locale=" + locale;
+            var invalid = get(url);
+            assertThat(invalid.status()).as(url).isEqualTo(400);
+            assertThat(invalid.body().path("code").stringValue()).as(url).isEqualTo("INVALID_LOCALE");
+        }
+    }
+
+    @Test
+    void listsPublishedProblemsAndGradesSample001UsingItsSystemSlot() throws Exception {
+        var items = get("/api/problems?locale=en").body().path("items");
+        assertThat(items).hasSize(2);
+        assertThat(items.get(0).path("problemId").stringValue()).isEqualTo("001");
+        assertThat(items.get(0).path("title").stringValue()).isEqualTo("The Night Watcher of Moon Harbor");
+        assertThat(items.get(0).path("difficulty").stringValue()).isEqualTo("beginner");
+        assertThat(get("/api/problems/001").body().at("/cases/0/grading").stringValue()).isEqualTo("STRUCTURE_ONLY");
+        assertThat(get("/api/problems/002").body().at("/cases/0/grading").stringValue()).isEqualTo("RULES");
+        for (String unknown : new String[]{"009", "invalid"}) {
+            var missing = get("/api/problems/" + unknown);
+            assertThat(missing.status()).isEqualTo(404);
+            assertThat(missing.body().path("code").stringValue()).isEqualTo("RESOURCE_NOT_FOUND");
+            var intent = new java.util.HashMap<>(createBody("{{requirement}}"));
+            intent.put("problemId", unknown);
+            assertThat(post("/api/runs", intent, UUID.randomUUID().toString(), token).status()).isEqualTo(404);
+        }
+        var pack = catalog.loadPublished("001");
+        for (var fixture : pack.cases().getFirst().fixtures()) {
+            var intent = new java.util.HashMap<>(createBody("{{requirement}}"));
+            intent.put("problemId", "001");
+            intent.put("version", 1);
+            intent.put("slots", Map.of("system", "你是艾琳。"));
+            var created = post("/api/runs", intent, UUID.randomUUID().toString(), token);
+            assertThat(created.status()).isEqualTo(201);
+            assertThat(created.body().at("/messages/0/role").stringValue()).isEqualTo("system");
+            assertThat(created.body().at("/messages/0/content").stringValue()).isEqualTo("你是艾琳。");
+            assertThat(created.body().at("/messages/1/content")).isEqualTo(pack.cases().getFirst().variables().path("question"));
+            var result = complete(id(created), fixture.path("rawOutput").stringValue());
+            assertThat(result.body().path("verdict")).as(fixture.path("id").stringValue())
+                    .isEqualTo(fixture.path("verdict"));
+            if ("missing-reply".equals(fixture.path("id").stringValue())) {
+                assertThat(result.body().at("/checks/1/path").stringValue()).isEqualTo("/reply");
+                assertThat(result.body().at("/checks/1/code").stringValue()).isEqualTo("REQUIRED");
+            }
+        }
+    }
+
+    @Test
+    void exposesPublishedVersionAndChecksRequestedVersions() throws Exception {
+        var current = get("/api/problems/002");
+        assertThat(current.body().path("publishedVersion").intValue())
+                .isEqualTo(current.body().path("version").intValue());
+        assertThat(get("/api/problems/002?version=" + current.body().path("version").intValue()).body())
+                .isEqualTo(current.body());
+        for (String version : new String[]{"3", "2147483648"}) {
+            var missing = get("/api/problems/002?version=" + version);
+            assertThat(missing.status()).isEqualTo(404);
+            assertThat(missing.body().path("code").stringValue()).isEqualTo("RESOURCE_NOT_FOUND");
+        }
+        for (String version : new String[]{"", "0", "-1", "1.0", "bad"}) {
+            var invalid = get("/api/problems/002?version=" + version);
+            assertThat(invalid.status()).isEqualTo(400);
+            assertThat(invalid.body().path("code").stringValue()).isEqualTo("INVALID_REQUEST");
+        }
+    }
+
+    @Test
+    void createsAndGradesTheRequestedCaseAndKeepsItsSnapshot() throws Exception {
+        var published = get("/api/problems/002").body();
+        assertThat(published.path("version").intValue()).isEqualTo(2);
+        assertThat(published.path("cases")).extracting(item -> item.path("caseId").stringValue())
+                .containsExactly("case-1", "case-2");
+        assertThat(published.toString()).doesNotContain("assertions", "fixtures", "boundary-mapping");
+        var historical = get("/api/problems/002?version=1").body();
+        assertThat(historical.path("version").intValue()).isEqualTo(1);
+        assertThat(historical.path("publishedVersion").intValue()).isEqualTo(2);
+        assertThat(historical.path("cases")).hasSize(1);
+
+        var intent = new java.util.HashMap<>(createBody("{{requirement}}"));
+        intent.put("caseId", "case-2");
+        String key = UUID.randomUUID().toString();
+        var created = post("/api/runs", intent, key, token);
+        assertThat(created.status()).isEqualTo(201);
+        assertThat(created.body().path("caseId").stringValue()).isEqualTo("case-2");
+        assertThat(created.body().at("/messages/0/content")).isEqualTo(published.at("/cases/1/variables/requirement"));
+        var correct = post("/api/runs", intent, UUID.randomUUID().toString(), token);
+        assertThat(correct.status()).isEqualTo(201);
+
+        intent.put("caseId", "case-1");
+        assertThat(post("/api/runs", intent, key, token).body().path("code").stringValue())
+                .isEqualTo("IDEMPOTENCY_CONFLICT");
+        var firstCase = post("/api/runs", intent, UUID.randomUUID().toString(), token);
+        assertThat(firstCase.status()).isEqualTo(201);
+        var pack = catalog.loadPublished("002");
+        String firstAnswer = pack.findCase("case-1").fixtures().get(0).path("rawOutput").stringValue();
+        String secondAnswer = pack.findCase("case-2").fixtures().get(0).path("rawOutput").stringValue();
+        assertThat(complete(id(firstCase), firstAnswer).body().path("verdict").stringValue()).isEqualTo("PASSED");
+        var wrongCase = complete(id(created), firstAnswer).body();
+        assertThat(wrongCase.path("verdict").stringValue()).isEqualTo("WRONG_ANSWER");
+        assertThat(wrongCase.path("caseId").stringValue()).isEqualTo("case-2");
+        assertThat(wrongCase.path("checks")).anySatisfy(check -> {
+            assertThat(check.path("id").stringValue()).isEqualTo("boundary-mapping");
+            assertThat(check.path("status").stringValue()).isEqualTo("FAIL");
+        });
+        assertThat(complete(id(correct), secondAnswer).body().path("verdict").stringValue()).isEqualTo("PASSED");
+        intent.put("caseId", "case-3");
+        assertThat(post("/api/runs", intent, UUID.randomUUID().toString(), token).body().path("code").stringValue())
+                .isEqualTo("INVALID_CASE");
     }
 
     @Test
@@ -117,7 +253,7 @@ class PracticeIntegrationTest {
         direct.put("mode", "PROXY");
         assertThat(post("/api/runs", direct, UUID.randomUUID().toString(), token).body().path("code").stringValue())
                 .isEqualTo("INVALID_MODE");
-        String raw = catalog.loadPublished("002").fixtures().path(0).path("rawOutput").stringValue();
+        String raw = catalog.loadPublished("002").findCase("case-1").fixtures().path(0).path("rawOutput").stringValue();
         assertThat(complete(id(created), raw).body().path("verdict").stringValue()).isEqualTo("PASSED");
     }
 
@@ -148,6 +284,34 @@ class PracticeIntegrationTest {
                         () -> new ByteArrayInputStream(bytes))).build();
         assertThat(client.send(chunked, HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(413);
         assertThat(get("/api/runs/" + id).body().path("status").stringValue()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void validatesSlotNamesAgainstThePackAfterCheckingIdempotency() throws Exception {
+        String key = UUID.randomUUID().toString();
+        var template = "{{requirement}}";
+        var intent = new java.util.HashMap<>(createBody(template));
+        intent.put("slots", java.util.List.of(template));
+        var invalidShape = post("/api/runs", intent, key, token);
+        assertThat(invalidShape.status()).isEqualTo(400);
+        assertThat(invalidShape.body().path("code").stringValue()).isEqualTo("INVALID_REQUEST");
+
+        for (var slots : java.util.List.of(Map.<String, String>of(), Map.of("system", template),
+                Map.of("user", template, "system", template))) {
+            intent.put("slots", slots);
+            var invalidSlot = post("/api/runs", intent, key, token);
+            assertThat(invalidSlot.status()).isEqualTo(422);
+            assertThat(invalidSlot.body().path("code").stringValue()).isEqualTo("INVALID_SLOT");
+        }
+
+        var original = create(key, template);
+        assertThat(original.status()).isEqualTo(201);
+        var conflict = post("/api/runs", intent, key, token);
+        assertThat(conflict.status()).isEqualTo(409);
+        assertThat(conflict.body().path("code").stringValue()).isEqualTo("IDEMPOTENCY_CONFLICT");
+        var replay = create(key, template);
+        assertThat(replay.status()).isEqualTo(200);
+        assertThat(replay.body()).isEqualTo(original.body());
     }
 
     @Test
@@ -198,7 +362,7 @@ class PracticeIntegrationTest {
         var service = new PracticeRuns(jdbc, transactionManager, catalog, judge, "expiry-fixture", clock);
         service.run(null);
         String key = UUID.randomUUID().toString();
-        var intent = new PracticeRuns.Create("002", 1, "case-1", "D0", Map.of("user", "{{requirement}}"));
+        var intent = new PracticeRuns.Create("002", 2, "case-1", "D0", Map.of("user", "{{requirement}}"));
         var created = service.create(key, intent).run();
         long expires = Instant.parse(created.expiresAt()).toEpochMilli();
         clock.now.set(expires - 100);
@@ -247,7 +411,7 @@ class PracticeIntegrationTest {
     }
 
     private static Map<String, Object> createBody(String prompt) {
-        return Map.of("problemId", "002", "version", 1, "caseId", "case-1", "mode", "D0",
+        return Map.of("problemId", "002", "version", 2, "caseId", "case-1", "mode", "D0",
                 "slots", Map.of("user", prompt), "requestParams", Map.of());
     }
 

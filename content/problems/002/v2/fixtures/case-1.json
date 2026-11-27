@@ -1,0 +1,26 @@
+[
+  {
+    "id": "correct-reversed",
+    "rawOutput": "{\"cases\":[{\"length\":13,\"expectedValid\":false},{\"length\":12,\"expectedValid\":true},{\"length\":11,\"expectedValid\":true},{\"length\":7,\"expectedValid\":true},{\"length\":6,\"expectedValid\":true},{\"length\":5,\"expectedValid\":false}]}",
+    "verdict": "PASSED",
+    "failedCheckIds": []
+  },
+  {
+    "id": "fenced-json",
+    "rawOutput": "```json\n{\"cases\":[]}\n```",
+    "verdict": "FORMAT_ERROR",
+    "failedCheckIds": []
+  },
+  {
+    "id": "boolean-string",
+    "rawOutput": "{\"cases\":[{\"length\":5,\"expectedValid\":\"false\"}]}",
+    "verdict": "FORMAT_ERROR",
+    "failedCheckIds": []
+  },
+  {
+    "id": "wrong-boundary",
+    "rawOutput": "{\"cases\":[{\"length\":5,\"expectedValid\":true},{\"length\":6,\"expectedValid\":true},{\"length\":7,\"expectedValid\":true},{\"length\":11,\"expectedValid\":true},{\"length\":12,\"expectedValid\":true},{\"length\":13,\"expectedValid\":false}]}",
+    "verdict": "WRONG_ANSWER",
+    "failedCheckIds": ["boundary-mapping"]
+  }
+]

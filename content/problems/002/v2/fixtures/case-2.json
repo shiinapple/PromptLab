@@ -1,0 +1,24 @@
+[
+  {
+    "id": "correct-boundaries",
+    "rawOutput": "{\"cases\":[{\"length\":2,\"expectedValid\":false},{\"length\":3,\"expectedValid\":true},{\"length\":4,\"expectedValid\":true},{\"length\":7,\"expectedValid\":true},{\"length\":8,\"expectedValid\":true},{\"length\":9,\"expectedValid\":false}]}",
+    "verdict": "PASSED",
+    "failedCheckIds": []
+  },
+  {
+    "id": "case-1-answer",
+    "rawOutput": "{\"cases\":[{\"length\":13,\"expectedValid\":false},{\"length\":12,\"expectedValid\":true},{\"length\":11,\"expectedValid\":true},{\"length\":7,\"expectedValid\":true},{\"length\":6,\"expectedValid\":true},{\"length\":5,\"expectedValid\":false}]}",
+    "verdict": "WRONG_ANSWER",
+    "failedCheckIds": [
+      "boundary-mapping"
+    ]
+  },
+  {
+    "id": "wrong-3-8-boundary",
+    "rawOutput": "{\"cases\":[{\"length\":2,\"expectedValid\":false},{\"length\":3,\"expectedValid\":true},{\"length\":4,\"expectedValid\":true},{\"length\":7,\"expectedValid\":true},{\"length\":8,\"expectedValid\":false},{\"length\":9,\"expectedValid\":false}]}",
+    "verdict": "WRONG_ANSWER",
+    "failedCheckIds": [
+      "boundary-mapping"
+    ]
+  }
+]

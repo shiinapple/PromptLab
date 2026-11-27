@@ -1,0 +1,36 @@
+{
+  "problemId": "001",
+  "version": 1,
+  "category": "roleplay",
+  "difficulty": "beginner",
+  "capability": "text",
+  "caseIds": [
+    "case-1"
+  ],
+  "slots": {
+    "system": {
+      "requiredVariables": []
+    }
+  },
+  "messages": [
+    {
+      "role": "system",
+      "parts": [
+        {
+          "type": "slot",
+          "name": "system"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "caseVariable",
+          "name": "question"
+        }
+      ]
+    }
+  ],
+  "requestParamAllowlist": []
+}

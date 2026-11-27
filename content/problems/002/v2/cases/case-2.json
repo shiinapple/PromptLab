@@ -1,0 +1,36 @@
+{
+  "caseId": "case-2",
+  "inputLocale": "zh-CN",
+  "variables": {
+    "requirement": "密码长度必须为 3 至 8，包含边界；仅检查长度，不检查字符种类。请覆盖边界前、边界及边界后：2、3、4、7、8、9。"
+  },
+  "assertions": [
+    {
+      "id": "case-count",
+      "op": "arraySize",
+      "path": "/cases",
+      "expected": 6
+    },
+    {
+      "id": "unique-lengths",
+      "op": "uniqueBy",
+      "path": "/cases",
+      "key": "/length"
+    },
+    {
+      "id": "boundary-mapping",
+      "op": "mapEquals",
+      "path": "/cases",
+      "key": "/length",
+      "value": "/expectedValid",
+      "expected": {
+        "2": false,
+        "3": true,
+        "4": true,
+        "7": true,
+        "8": true,
+        "9": false
+      }
+    }
+  ]
+}

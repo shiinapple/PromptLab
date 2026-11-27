@@ -1,5 +1,6 @@
 package cn.shiinapple.promptpractice.practice;
 
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -13,30 +14,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import org.sqlite.SQLiteException;
 
+import cn.shiinapple.promptpractice.common.SqliteWrites;
 import cn.shiinapple.promptpractice.judge.JudgeService;
+import cn.shiinapple.promptpractice.maintenance.RunRetention;
 import cn.shiinapple.promptpractice.problem.ProblemCatalog;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
-@Profile("local-practice")
 public class PracticeRuns implements ApplicationRunner {
     static final JsonMapper JSON = JsonMapper.builder().build();
-    static final String PROBLEM_ID = "002";
-    private static final long TTL = Duration.ofHours(24).toMillis();
     private static final String SELECT = """
             SELECT r.*, s.problem_id, s.version, s.case_id, s.messages_json, s.request_params_json, v.content_hash
             FROM runs r JOIN prompt_snapshots s ON s.id = r.snapshot_id
@@ -45,71 +41,121 @@ public class PracticeRuns implements ApplicationRunner {
             """;
 
     private final JdbcClient jdbc;
-    private final TransactionTemplate write;
+    private final SqliteWrites write;
     private final ProblemCatalog catalog;
     private final JudgeService judge;
-    private final String owner;
+    private final String localOwner;
     private final Clock clock;
+    private final RunRetention retention;
 
     @Autowired
     PracticeRuns(JdbcClient jdbc, PlatformTransactionManager transactions, ProblemCatalog catalog, JudgeService judge,
-            @Value("${prompt-practice.local-subject:local-practice}") String owner) {
-        this(jdbc, transactions, catalog, judge, owner, Clock.systemUTC());
+            Environment environment, RunRetention retention) {
+        this(jdbc, transactions, catalog, judge, localSubject(environment), Clock.systemUTC(), retention);
     }
 
     PracticeRuns(JdbcClient jdbc, PlatformTransactionManager transactions, ProblemCatalog catalog, JudgeService judge,
             String owner, Clock clock) {
-        if (!owner.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("Invalid local subject");
+        this(jdbc, transactions, catalog, judge, owner, clock, new RunRetention(Duration.ofHours(24), Duration.ofMinutes(10)));
+    }
+
+    private PracticeRuns(JdbcClient jdbc, PlatformTransactionManager transactions, ProblemCatalog catalog,
+            JudgeService judge, String owner, Clock clock, RunRetention retention) {
+        if (owner != null && !owner.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("Invalid local subject");
         this.jdbc = jdbc;
-        this.write = new TransactionTemplate(transactions);
+        this.write = new SqliteWrites(transactions, jdbc);
         this.catalog = catalog;
         this.judge = judge;
-        this.owner = owner;
+        this.localOwner = owner;
         this.clock = clock;
+        this.retention = retention;
+    }
+
+    private static String localSubject(Environment environment) {
+        boolean local = environment.matchesProfiles("local-practice");
+        if (local && environment.matchesProfiles("production", "prod")
+                || !local && environment.containsProperty("prompt-practice.local-subject")) {
+            throw new IllegalStateException("Local subject configuration is only allowed in local-practice");
+        }
+        if (!local) return null;
+        InetAddress address = environment.getProperty("server.address", InetAddress.class);
+        if (address == null || !address.isLoopbackAddress()) {
+            throw new IllegalStateException("Local practice requires a loopback bind address");
+        }
+        return environment.getProperty("prompt-practice.local-subject", "local-practice");
+    }
+
+    String localOwner() {
+        return localOwner;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        var pack = catalog.loadPublished(PROBLEM_ID);
-        inWrite(() -> {
+        var packs = catalog.loadReleasedVersions();
+        write.execute(() -> {
             long now = clock.millis();
-            jdbc.sql("INSERT INTO users(id, created_at) VALUES (:owner, :now) ON CONFLICT DO NOTHING")
-                    .param("owner", owner).param("now", now).update();
-            jdbc.sql("""
-                    INSERT INTO problem_versions(problem_id, version, content_hash, published_at)
-                    VALUES (:id, :version, :hash, :now) ON CONFLICT DO NOTHING
-                    """).param("id", pack.problemId()).param("version", pack.version())
-                    .param("hash", pack.contentHash()).param("now", now).update();
-            String hash = jdbc.sql("SELECT content_hash FROM problem_versions WHERE problem_id = :id AND version = :version")
-                    .param("id", pack.problemId()).param("version", pack.version()).query(String.class).single();
-            if (!hash.equals(pack.contentHash())) throw new IllegalStateException("Published problem bytes changed");
-            jdbc.sql("INSERT INTO problem_cases VALUES (:id, :version, :caseId) ON CONFLICT DO NOTHING")
-                    .param("id", pack.problemId()).param("version", pack.version()).param("caseId", pack.caseId()).update();
+            if (localOwner != null) {
+                jdbc.sql("INSERT INTO users(id, created_at) VALUES (:owner, :now) ON CONFLICT DO NOTHING")
+                        .param("owner", localOwner).param("now", now).update();
+                boolean fixture = jdbc.sql("""
+                        SELECT state = 'DISABLED' AND email_normalized IS NULL AND password_hash IS NULL
+                        FROM users WHERE id = :owner
+                        """).param("owner", localOwner).query(Boolean.class).single();
+                if (!fixture) throw new IllegalStateException("The local subject must be a credential-free fixture");
+            }
+            var registered = jdbc.sql("SELECT problem_id, version, content_hash FROM problem_versions")
+                    .query((row, index) -> new RegisteredVersion(row.getString(1), row.getInt(2), row.getString(3)))
+                    .list();
+            for (var version : registered) {
+                if (packs.stream().noneMatch(pack -> version.id().equals(pack.problemId())
+                        && version.version() == pack.version() && version.hash().equals(pack.contentHash()))) {
+                    throw new IllegalStateException("Previously registered problem version is unavailable or changed");
+                }
+            }
+            for (var pack : packs) {
+                jdbc.sql("""
+                        INSERT INTO problem_versions(problem_id, version, content_hash, published_at)
+                        VALUES (:id, :version, :hash, :now) ON CONFLICT DO NOTHING
+                        """).param("id", pack.problemId()).param("version", pack.version())
+                        .param("hash", pack.contentHash()).param("now", now).update();
+                String hash = jdbc.sql("SELECT content_hash FROM problem_versions WHERE problem_id = :id AND version = :version")
+                        .param("id", pack.problemId()).param("version", pack.version()).query(String.class).single();
+                if (!hash.equals(pack.contentHash())) throw new IllegalStateException("Published problem bytes changed");
+                for (var problemCase : pack.cases()) {
+                    jdbc.sql("INSERT INTO problem_cases VALUES (:id, :version, :caseId) ON CONFLICT DO NOTHING")
+                            .param("id", pack.problemId()).param("version", pack.version())
+                            .param("caseId", problemCase.caseId()).update();
+                }
+            }
             return null;
         });
     }
 
     Created create(String key, Create intent) {
+        return create(localOwner, key, intent);
+    }
+
+    Created create(String owner, String key, Create intent) {
         String digest = digest(List.of("create-v1", intent.problemId(), intent.version(), intent.caseId(),
                 intent.mode(), new TreeMap<>(intent.slots()), Map.of()));
-        Stored existing = byKey(key);
+        Stored existing = byKey(owner, key);
         if (existing != null) return reused(existing, digest);
 
-        if (!PROBLEM_ID.equals(intent.problemId())) throw new PracticeError(404, "RESOURCE_NOT_FOUND");
         var pack = catalog.loadPublished(intent.problemId());
         if (intent.version() != pack.version()) throw new PracticeError(409, "VERSION_CHANGED");
-        if (!intent.caseId().equals(pack.caseId())) throw new PracticeError(422, "INVALID_CASE");
+        var problemCase = pack.findCase(intent.caseId());
+        if (problemCase == null) throw new PracticeError(422, "INVALID_CASE");
 
         List<MessageAssembler.Message> messages;
         try {
-            messages = MessageAssembler.assemble(pack.problem(), intent.slots(), pack.publicCase().path("variables"));
+            messages = MessageAssembler.assemble(pack.problem(), intent.slots(), problemCase.variables());
         } catch (IllegalArgumentException error) {
             throw new PracticeError(422, "INVALID_SLOT");
         }
         String slots = JSON.writeValueAsString(new TreeMap<>(intent.slots()));
         String assembled = JSON.writeValueAsString(messages);
-        return inWrite(() -> {
-            Stored winner = byKey(key);
+        return write.execute(() -> {
+            Stored winner = byKey(owner, key);
             if (winner != null) return reused(winner, digest);
             long now = clock.millis();
             String snapshotId = UUID.randomUUID().toString();
@@ -127,30 +173,39 @@ public class PracticeRuns implements ApplicationRunner {
                     VALUES (:id, :owner, :snapshot, :mode, :key, :digest, 'PENDING', :now, :expires)
                     """).param("id", runId).param("owner", owner).param("snapshot", snapshotId)
                     .param("mode", intent.mode()).param("key", key).param("digest", digest)
-                    .param("now", now).param("expires", now + TTL).update();
-            return new Created(true, byId(runId).view(now));
+                    .param("now", now).param("expires", Math.addExact(now, retention.milliseconds(intent.mode()))).update();
+            return new Created(true, byId(owner, runId).view(now));
         });
     }
 
     Run get(String id) {
-        return byId(id).view(clock.millis());
+        return get(localOwner, id);
+    }
+
+    Run get(String owner, String id) {
+        return byId(owner, id).view(clock.millis());
     }
 
     Run submit(String id, Submission intent) {
+        return submit(localOwner, id, intent);
+    }
+
+    Run submit(String owner, String id, Submission intent) {
         String digest = digest(List.of("result-v1", intent.status(), intent.rawOutput() == null ? "" : intent.rawOutput(),
                 intent.failureCode() == null ? "" : intent.failureCode(), new TreeMap<>(intent.reported())));
-        Stored before = byId(id);
+        Stored before = byId(owner, id);
         Run replay = existingResult(before, digest, clock.millis());
         if (replay != null) return replay;
 
         JudgeService.Result grade = null;
         if ("COMPLETED".equals(intent.status())) {
             var pack = catalog.loadVersion(before.problemId(), before.version());
-            if (!pack.contentHash().equals(before.contentHash()) || !pack.caseId().equals(before.caseId())) {
+            var problemCase = pack.findCase(before.caseId());
+            if (!pack.contentHash().equals(before.contentHash()) || problemCase == null) {
                 throw new IllegalStateException("Run problem snapshot unavailable");
             }
             try {
-                grade = judge.judge(intent.rawOutput(), pack.schema(), pack.publicCase().path("assertions"));
+                grade = judge.judge(intent.rawOutput(), pack.schema(), problemCase.assertions());
             } catch (JudgeService.OutputLimit limit) {
                 throw new PracticeError(413, "PAYLOAD_TOO_LARGE");
             }
@@ -158,8 +213,8 @@ public class PracticeRuns implements ApplicationRunner {
         String verdict = grade == null ? null : grade.verdict();
         String checks = grade == null ? null : JSON.writeValueAsString(grade.checks());
         String reported = intent.reported().isEmpty() ? null : JSON.writeValueAsString(intent.reported());
-        return inWrite(() -> {
-            // TransactionTemplate has acquired the IMMEDIATE write reservation before this clock read.
+        return write.execute(() -> {
+            // SqliteWrites has acquired the write reservation before this clock read.
             long now = clock.millis();
             int updated = jdbc.sql("""
                     UPDATE runs SET status = :status, result_digest = :digest, raw_output = :raw,
@@ -169,7 +224,7 @@ public class PracticeRuns implements ApplicationRunner {
                     """).param("status", intent.status()).param("digest", digest).param("raw", intent.rawOutput())
                     .param("meta", reported).param("failureCode", intent.failureCode()).param("verdict", verdict)
                     .param("checks", checks).param("now", now).param("id", id).param("owner", owner).update();
-            Stored winner = byId(id);
+            Stored winner = byId(owner, id);
             return updated == 1 ? winner.view(now) : existingResult(winner, digest, now);
         });
     }
@@ -188,12 +243,12 @@ public class PracticeRuns implements ApplicationRunner {
         return new Created(false, run.view(clock.millis()));
     }
 
-    private Stored byKey(String key) {
+    private Stored byKey(String owner, String key) {
         return jdbc.sql(SELECT + " r.idempotency_key = :key").param("owner", owner).param("key", key)
                 .query((rs, row) -> stored(rs)).optional().orElse(null);
     }
 
-    private Stored byId(String id) {
+    private Stored byId(String owner, String id) {
         return jdbc.sql(SELECT + " r.id = :id").param("owner", owner).param("id", id)
                 .query((rs, row) -> stored(rs)).optional().orElseThrow(() -> new PracticeError(404, "RESOURCE_NOT_FOUND"));
     }
@@ -212,19 +267,6 @@ public class PracticeRuns implements ApplicationRunner {
         return data == null ? null : JSON.readTree(data);
     }
 
-    private <T> T inWrite(Supplier<T> operation) {
-        try {
-            return write.execute(status -> operation.get());
-        } catch (RuntimeException error) {
-            for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-                if (cause instanceof SQLiteException sqlite && (sqlite.getResultCode().code & 0xff) == 5) {
-                    throw new PracticeError(503, "TEMPORARILY_UNAVAILABLE");
-                }
-            }
-            throw error;
-        }
-    }
-
     private static String digest(Object ordered) {
         try {
             byte[] json = JSON.writeValueAsString(ordered).getBytes(StandardCharsets.UTF_8);
@@ -233,6 +275,8 @@ public class PracticeRuns implements ApplicationRunner {
             throw new IllegalStateException(error);
         }
     }
+
+    private record RegisteredVersion(String id, int version, String hash) {}
 
     record Create(String problemId, int version, String caseId, String mode, Map<String, String> slots) {
     }

@@ -25,7 +25,7 @@ export function useManualRun(run: Ref<Run | undefined>, feedback: Feedback, guar
     reset()
     await feedback.action(async () => {
       raw.value = await importResponse(file)
-      feedback.notice.value = t('已提取完整正文，请确认它属于当前运行。', 'Output imported. Confirm it belongs to this run.')
+      feedback.noticeText.value = () => t('已提取完整正文，请确认它属于当前运行。', 'Output imported. Confirm it belongs to this run.')
     })
   }
 

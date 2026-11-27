@@ -1,0 +1,30 @@
+{
+  "problemId": "002",
+  "version": 2,
+  "category": "development",
+  "difficulty": "beginner",
+  "capability": "text",
+  "caseIds": [
+    "case-1",
+    "case-2"
+  ],
+  "slots": {
+    "user": {
+      "requiredVariables": [
+        "requirement"
+      ]
+    }
+  },
+  "messages": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "slot",
+          "name": "user"
+        }
+      ]
+    }
+  ],
+  "requestParamAllowlist": []
+}

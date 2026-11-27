@@ -39,15 +39,11 @@ backend/                         # 单 Maven 模块，Maven Wrapper，Java 21
   src/main/resources/db/migration/ # Flyway 增量迁移
   src/test/                       # 单元、HTTP 与真实临时 SQLite 集成测试
 frontend/
-  src/app/                        # 应用入口、路由、i18n
-  src/features/
-    auth/                         # 会话与登录页
-    problems/                     # 题库和题面
-    practice/                     # 编辑、预览、D0 与运行编排
-    history/                      # 运行记录与归档
-    settings/                     # 用户偏好页
-    model/                        # 连接设置、凭据和直连适配器
-  src/shared/                     # 平台 API client、通用显示组件与样式
+  src/app/                        # 应用入口与页面布局
+  src/account/                    # 登录表单
+  src/practice/                   # 题库、编辑、预览、运行编排、历史与平台 API client
+  src/model/                      # 模型设置、浏览器凭据与直连
+  src/styles/                     # Design Token
 content/problems/                 # 版本化题目资源，构建时打包受信发布内容
 deploy/                           # 到部署阶段添加 Nginx、systemd、备份操作文件
 docs/                             # 架构、验证、任务、学习与交付
@@ -58,7 +54,7 @@ poc/                              # 独立实验与证据
 |---|---|---|
 | auth | 用户创建、登录、账号状态、当前主体 | Spring Security、自己的用户数据访问 |
 | problem | 题目资源、版本/用例目录、消息组装 | 受信内容、自己的目录数据访问 |
-| judge | 原文解析、Schema 校验、确定性断言、结构化反馈 | Jackson、验证后的 Schema 库、调用方传入的受信规则；纯计算，无网络与 DB |
+| judge | 原文解析、Schema 校验、确定性断言、结构化反馈 | Jackson、本地 Schema 子集、调用方传入的受信规则；纯计算，无网络与 DB |
 | practice | 草稿、冻结、终态、过期、本人历史、归档 | problem 的版本接口、judge 的判题入口、控制器解析的用户主体、自己的数据访问 |
 | settings | 语言、编辑器偏好 | 当前用户主体、自己的偏好数据访问 |
 | common | 请求 ID、错误格式、时钟或配置等已产生的共用基础设施 | Spring 与标准库 |
@@ -105,7 +101,7 @@ flowchart TB
 | 进程和资源 | 一个受 systemd 管理的 Java 进程与 Nginx，构建在目标机外完成。JVM 候选 `-Xms128m -Xmx512m`，小池候选 1 idle / 4 max、busy timeout 1 秒从 PoC 起步；实测请求线程、判题并发、RSS、WAL 和磁盘余量再锁定。池大小不能提高 SQLite 的同时写入数。 |
 | 配置 | 工程默认值、dev/test 与生产配置分开。生产地址回环，数据目录与发布目录分离。Nginx 只信任本机转发链的预期设置，由应用生成请求 ID。健康检查仅暴露必要状态，迁移及题库校验完成后才就绪，生产诊断信息不公开。 |
 | 日志与异常 | 结构化日志记请求 ID、路由模板、HTTP 状态、耗时、故障码；超限/忙等待和认证失败做有限计数。预期错误按 API 映射，意外异常报 500 且内部留可定位的安全日志。Nginx/应用日志排除正文、Prompt、查询串、连接配置、认证头和 Cookie；按大小、周期、磁盘预算轮转。 |
-| 备份 | 先用同一数据库连接机制运行 `VACUUM INTO` 输出到新文件，建议每日低峰及发布前备份。发布前测试活动写入时的一致性及 CPU/磁盘影响。限制权限，完整性检查后再移出主机，保留与备份对应的题库和构建版本。验收以独立目录恢复、外键/行数检查和关键业务读取为准。[SQLite VACUUM](https://sqlite.org/lang_vacuum.html) |
+| 备份 | 先用同一数据库连接机制运行 `VACUUM INTO` 输出到新文件，每天低峰备份一次，默认保留最近 7 份。每日备份成功时，恢复窗口为 7 天，最多丢失 1 天数据。发布前测试活动写入时的一致性及 CPU/磁盘影响。限制权限，并保留与备份对应的题库和构建版本。验收以独立目录恢复、外键/行数检查和关键业务读取为准。[备份与恢复操作](../guides/DATA_OPERATIONS.md) · [SQLite VACUUM](https://sqlite.org/lang_vacuum.html) |
 | 上线与回滚 | 发布前备份，停止旧服务，单一实例迁移并校验题库，再启动、测健康和真实 HTTPS 冒烟。应用回退先核对数据库和题库兼容性；不兼容时停写，从发布前的一致性备份恢复并明确停写后的数据影响。结合运行窗口验证日志轮转、磁盘告警、异常重启与回滚。 |
 
 测试采用纯函数单元、真实 SQLite 集成、平台 HTTP 契约、浏览器 Mock E2E 和授权目标环境验收。默认测试不调用真实模型。2 核 2 GiB 容器 PoC 只覆盖短负载和测试表，目标机资源上限、实际系统盘 I/O、留存和备份恢复窗口仍待测。[验证分层与预算](../TESTING.md) · [POC-04](../validation/POC-04.md)

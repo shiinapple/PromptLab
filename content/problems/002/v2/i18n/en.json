@@ -1,0 +1,7 @@
+{
+  "title": "Requirements to Test Cases",
+  "description": "Write a prompt that turns a password length requirement into JSON test cases. Return an object with a cases array. Each item has an integer length and a boolean expectedValid. Include each of the six specified lengths exactly once, in any order.",
+  "defaultSlots": {
+    "user": "Generate test cases for the following requirement:\n{{requirement}}"
+  }
+}

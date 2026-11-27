@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { english, t } from '../model/copy'
+import { t } from '../i18n/locale'
 
 defineProps<{ raw: string; busy: boolean }>()
 const emit = defineEmits<{ copyRequest: []; download: []; importFile: [file: File]; edit: [value: string]; grade: [] }>()
@@ -25,8 +25,11 @@ function paste(event: ClipboardEvent) {
 </script>
 
 <template>
-  <p class="help"><template v-if="english">Replace <code>YOUR_MODEL</code> in your model tool and run the request. Import the response or paste the complete output.</template>
-    <template v-else>在模型工具中替换 <code>YOUR_MODEL</code> 并执行请求，再导入响应或粘贴完整正文。</template></p>
+  <ol class="steps" :aria-label="t('手动运行步骤', 'Manual run steps')">
+    <li>{{ t('复制或下载请求。', 'Copy or download the request.') }}</li>
+    <li>{{ t('在外部工具中执行，并把 Model ID 替换为你使用的模型。', 'Run it in your tool and replace the model ID with yours.') }}</li>
+    <li>{{ t('核对下方的用例与运行 ID 一致后，导入响应 JSON，或粘贴完整正文。', 'Check that the case and run ID match, then import the response JSON or paste the complete output.') }}</li>
+  </ol>
   <div class="actions export">
     <button type="button" :disabled="busy" @click="$emit('copyRequest')">{{ t('复制请求', 'Copy request') }}</button>
     <button type="button" :disabled="busy" @click="$emit('download')">{{ t('下载请求', 'Download request') }}</button>
@@ -37,9 +40,14 @@ function paste(event: ClipboardEvent) {
   <textarea id="raw" :value="raw" rows="5" :disabled="busy" spellcheck="false"
     @input="$emit('edit', ($event.target as HTMLTextAreaElement).value)" @paste="paste" />
   <label class="confirm"><input id="confirm" v-model="confirmed" type="checkbox" :disabled="busy || !raw.trim()">
-    我确认正文完整，并且来自当前运行和用例
+    {{ t('我确认正文完整，并且来自当前运行和用例', 'I confirm the output is complete and comes from this run and case') }}
   </label>
   <div class="actions">
     <button id="grade" type="button" class="primary" :disabled="busy || !confirmed || !raw.trim()" @click="$emit('grade')">{{ t('提交判题', 'Grade output') }}</button>
   </div>
 </template>
+
+<style scoped>
+.steps { margin: 0 0 var(--space-3); padding-left: var(--space-5); color: var(--color-muted-ink); font-size: var(--font-size-message); }
+.steps li { margin-bottom: var(--space-1); }
+</style>

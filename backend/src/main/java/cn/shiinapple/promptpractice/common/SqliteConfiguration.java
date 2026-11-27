@@ -24,7 +24,7 @@ class SqliteConfiguration {
         var config = new SQLiteConfig();
         config.enforceForeignKeys(true);
         config.setBusyTimeout(1000);
-        config.setTransactionMode(SQLiteConfig.TransactionMode.IMMEDIATE);
+        config.setTransactionMode(SQLiteConfig.TransactionMode.DEFERRED);
         var sqlite = new SQLiteDataSource(config);
         sqlite.setUrl("jdbc:sqlite:" + file.toUri().toASCIIString());
 

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { once } from 'node:events'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -50,10 +50,47 @@ async function freePort() {
 
 try {
   const apiPort = await freePort()
-  start('java', ['-jar', join(root, 'backend/target/prompt-practice-0.1.0-SNAPSHOT.jar'),
-    '--spring.profiles.active=local-practice', `--server.port=${apiPort}`,
-    `--prompt-practice.database.path=${join(temp, 'practice.sqlite3')}`], { cwd: temp })
-  await until(async () => (await fetch(`http://127.0.0.1:${apiPort}/api/health`)).ok, 'Spring readiness')
+  const api = `http://127.0.0.1:${apiPort}`
+  const database = join(temp, 'practice.sqlite3')
+  function startBackend(jar) {
+    return start('java', ['-jar', jar, '--spring.profiles.active=local-practice', `--server.port=${apiPort}`,
+      `--prompt-practice.database.path=${database}`], { cwd: temp })
+  }
+  const waitForBackend = () => until(async () => (await fetch(`${api}/api/health`)).ok, 'Spring readiness')
+  async function createV1Run(intent, key) {
+    const { token } = await (await fetch(`${api}/api/practice/session`)).json()
+    return fetch(`${api}/api/runs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Practice-CSRF': token, 'Idempotency-Key': key },
+      body: JSON.stringify(intent),
+    })
+  }
+
+  let previousRun
+  const v1Jar = process.env.PROMPTLAB_V1_JAR
+  if (v1Jar) {
+    const previous = startBackend(resolve(v1Jar))
+    await waitForBackend()
+    const { version } = await (await fetch(`${api}/api/problems/002`)).json()
+    assert.equal(version, 1)
+    const body = { problemId: '002', version: 1, caseId: 'case-1', mode: 'D0',
+      slots: { user: '升级前草稿 {{requirement}}' } }
+    const key = randomUUID()
+    const response = await createV1Run(body, key)
+    assert.equal(response.status, 201)
+    previousRun = { key, body, run: await response.json() }
+    const stopped = once(previous, 'exit')
+    previous.kill()
+    await stopped
+  }
+
+  startBackend(join(root, 'backend/target/prompt-practice-0.1.0-SNAPSHOT.jar'))
+  await waitForBackend()
+  if (previousRun) {
+    const replay = await createV1Run(previousRun.body, previousRun.key)
+    assert.equal(replay.status, 200)
+    assert.deepEqual(await replay.json(), previousRun.run)
+    assert.equal((await createV1Run(previousRun.body, randomUUID())).status, 409)
+  }
   const webPort = await freePort()
   const origin = `http://127.0.0.1:${webPort}`
   const frontend = join(root, 'frontend')
@@ -140,6 +177,37 @@ try {
   })
   await send('Network.enable', { maxPostDataSize: 2_000_000 })
   await send('Page.navigate', { url: origin })
+  await waitFor("document.querySelector('h1')?.textContent === '月港酒馆的守夜人'", 'first published problem')
+  assert.equal(await page("document.querySelector('label[for=prompt]').textContent"), 'System Prompt')
+  const tavernDraft = '你是艾琳。只输出 JSON。'
+  const testDraft = '保留 002 草稿 {{requirement}}'
+  await change('#prompt', tavernDraft)
+  await clickText('创建运行')
+  await waitFor("document.querySelector('#run-status')?.textContent.trim() === '等待导入'", '001 pending run')
+  const tavernRun = await page("new URL(location.href).searchParams.get('run')")
+  assert.deepEqual(await page("JSON.parse(document.querySelector('#frozen-request').textContent).messages"), [
+    { role: 'system', content: tavernDraft },
+    { role: 'user', content: '外面下了很大的雨，我可以在这里待到天亮吗？' },
+  ])
+  await clickText('002 · 需求转测试用例')
+  await waitFor("document.querySelector('h1')?.textContent === '需求转测试用例'", 'switch to 002')
+  await change('#prompt', testDraft)
+  const pendingTavern = await (await fetch(`${origin}/api/runs/${tavernRun}`)).json()
+  assert.equal(pendingTavern.problemId, '001')
+  assert.equal(pendingTavern.status, 'PENDING')
+  assert.match(await page("document.querySelector('#run-id').textContent"), /^001 ·/)
+  await change('#raw', '{"name":"艾琳","reply":"去炉火边坐吧。"}')
+  await confirmGrade('JSON 格式通过；人设表现未自动评价')
+  await clickText('001 · 月港酒馆的守夜人')
+  await waitFor(`document.querySelector('#prompt')?.value === ${JSON.stringify(tavernDraft)}`, '001 draft restored')
+  await clickText('002 · 需求转测试用例')
+  await waitFor(`document.querySelector('#prompt')?.value === ${JSON.stringify(testDraft)}`, '002 draft restored')
+  await send('Page.navigate', { url: origin + '/?problem=002&run=' + tavernRun })
+  await waitFor("document.querySelector('h1')?.textContent === '月港酒馆的守夜人'", 'run determines problem on reload')
+  await waitFor("document.querySelector('#run-status')?.textContent.trim() === 'JSON 格式通过；人设表现未自动评价'", 'restored 001 verdict')
+  console.log('PASS 001 system slot and manual grading, independent problem drafts and pending run identity')
+
+  await send('Page.navigate', { url: origin + '/?problem=002' })
   await waitFor("document.querySelector('h1')?.textContent === '需求转测试用例'", 'localized problem')
   await change('#prompt', '没有必需变量')
   assert.equal(await page("document.querySelector('button.primary').disabled"), true)
@@ -497,6 +565,53 @@ try {
       await send('Fetch.disable')
     }
   }
+  await send('Page.navigate', { url: origin + '/?problem=002' })
+  await waitFor("document.querySelector('.case-text')?.textContent.includes('6 至 12')", 'first 002/v2 case')
+  await clickText('手动运行')
+  const sharedDraft = '两个用例共用 {{requirement}}'
+  await change('#prompt', sharedDraft)
+  await clickText('创建运行')
+  await waitFor("document.querySelector('#run-id')?.textContent.includes('v2 · case-1')", 'case 1 frozen')
+  const case1Run = await page("new URL(location.href).searchParams.get('run')")
+  await clickText('用例 2')
+  assert.equal(await page("document.querySelector('#prompt').value"), sharedDraft)
+  assert.match(await page("document.querySelector('.case-text').textContent"), /3 至 8/)
+  assert.match(await page("document.querySelector('#preview').textContent"), /3 至 8/)
+  assert.match(await page("document.querySelector('#frozen-request').textContent"), /6 至 12/)
+  await paste(fixtures[0].rawOutput)
+  await confirmGrade('通过')
+  assert.match(await page("document.querySelector('#run-heading').textContent"), /case-1/)
+  assert.equal((await (await fetch(`${origin}/api/runs/${case1Run}`)).json()).caseId, 'case-1')
+
+  await clickText('新建运行')
+  await waitFor("document.querySelector('#run-id')?.textContent.includes('v2 · case-2')", 'case 2 frozen')
+  await paste(fixtures[0].rawOutput)
+  await confirmGrade('答案错误')
+  await clickText('新建运行')
+  await waitFor("document.querySelector('#raw') !== null", 'new case 2 run')
+  const case2Fixtures = JSON.parse(await readFile(join(root, 'content/problems/002/v2/fixtures/case-2.json'), 'utf8'))
+  await paste(case2Fixtures[0].rawOutput)
+  await confirmGrade('通过')
+  await send('Page.reload')
+  await waitFor("document.querySelector('.case-text')?.textContent.includes('3 至 8')", 'restored run selects case 2')
+  assert.match(await page("document.querySelector('#run-heading').textContent"), /case-2/)
+  console.log('PASS two cases share a draft, freeze separately, and are graded against their own boundaries')
+
+  if (previousRun) {
+    await send('Page.navigate', { url: `${origin}/?problem=001&run=${previousRun.run.runId}` })
+    await waitFor("document.body.textContent.includes('旧版本')", 'restored 002/v1 problem')
+    assert.match(await page("document.querySelector('#run-id').textContent"), /^002 · v1 · case-1/)
+    assert.match(await page("document.querySelector('.case-text').textContent"), /6 至 12/)
+    assert.match(await page("document.querySelector('#frozen-request').textContent"), /升级前草稿/)
+    assert.equal(await page("document.querySelector('button.primary').disabled"), true)
+    await paste(fixtures[0].rawOutput)
+    await confirmGrade('通过')
+    await clickText('切回当前版本')
+    await waitFor("[...document.querySelectorAll('button')].some(button => button.textContent.trim() === '用例 2')", 'switch to the real v2 pack')
+    assert.equal(await page('new URL(location.href).searchParams.has("run")'), false)
+    console.log('PASS v2 starts on the v1 SQLite database and a pending v1 run can be restored, submitted and graded')
+  }
+
   await checkHttpsMatching(true, origin)
   const fixedPort = await freePort()
   const fixed = 'http://127.0.0.1:' + fixedPort

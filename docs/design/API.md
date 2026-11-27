@@ -7,21 +7,28 @@
 | 阶段 | 方法与路径 | 请求与响应 |
 |---|---|---|
 | M0 | GET /api/health | 200 最小就绪状态，未就绪 503；不含构建配置、数据路径或诊断详情 |
-| M1/M3 | GET /api/problems | 当前发布的题目摘要与版本，list 返回 `items`；M1 仅 002。 |
-| M1/M3 | GET /api/problems/{problemId} | 题目、当前版本、公开用例、编辑槽、预览模板和受信资产引用；按 zh-CN/en 返回展示文本。 |
+| M1/M3 | GET /api/problems | 当前发布的题目摘要与版本，list 返回 `items`；M1 仅 002。可选 `locale` 查询参数（同上，缺省 `zh-CN`，其他值返回 400 `INVALID_LOCALE`），`title` 按该语言返回。 |
+| M1/M3 | GET /api/problems/{problemId} | 题目、当前版本、公开用例、编辑槽、预览模板和受信资产引用；按 zh-CN/en 返回展示文本。可选 `locale` 查询参数（`zh-CN` 或 `en`，缺省 `zh-CN`；其他值返回 400 `INVALID_LOCALE`）。响应含 `locale`。 |
 | M1 | POST /api/runs | `Idempotency-Key` 请求头，正文含 problemId、version、caseId、mode、slots、受限 requestParams；201 + Location，返回 runId、冻结消息、参数、status、expiresAt。相同意图重试 200。 |
 | M1 | POST /api/runs/{runId}/result | 提交完整正文或明确的故障/取消；200 返回终态与 feedback，重试与并发见数据模型。 |
 | M1 | GET /api/runs/{runId} | 本人快照与状态，已判题时含原文、verdict 和 checks。 |
 | M4 | GET /api/auth/csrf | 同源返回 token 与 headerName，允许匿名初始化会话。 |
 | M4 | POST /api/auth/login；POST /api/auth/logout | 登录接收 email、password，成功 204；退出使会话失效并返回 204。两者校验 CSRF。 |
 | M4 | GET /api/me | 用户标识、显示信息。无有效会话返回 401。 |
-| M4 | GET/PATCH /api/settings | 读取或更新 locale 与允许的编辑器偏好。PATCH 返回保存后的记录。 |
+| M4 | GET/PATCH /api/settings | 读取或更新 locale 与允许的编辑器偏好。`locale` 仅接受 `zh-CN` 或 `en`，其他值（含非字符串）返回 400 `INVALID_LOCALE`。PATCH 返回保存后的记录。 |
 | M4 | GET/PUT /api/problems/{problemId}/draft | GET 可带 version，缺省取当前版，无草稿返回 `draft: null`。PUT 明确 version、caseId、slots、revision，创建返回 201，更新 200。旧版草稿可读取并复制到当前版。 |
 | M4 | GET /api/problems/{problemId}/runs | 本人跨版本历史，按时间倒序分页，列表只含摘要。 |
 | M4 | POST /api/submissions；GET /api/submissions | 传 runId 归档已判题运行，201 或幂等 200；分页查看本人归档。 |
 | M4 | DELETE /api/submissions/{submissionId} | 移除本人归档标记，成功 204。 |
 
 M1 到本地 M3 使用显式本地测试主体。M4 生产形态下，除健康、获取 CSRF 与登录入口外，业务 API 需要会话。列表规模增长时采用 `limit` 与不透明 `cursor`，返回 `{items, nextCursor}`。游标绑定排序与筛选，读取始终带当前主体。运行详情与列表字段各自白名单，列表不返回模型原文或完整快照。
+
+## M4 设置、草稿与列表
+
+- `GET /api/settings` 返回 `{locale, editorPrefs, updatedAt}`。首次读取的默认值分别为 `zh-CN`、空对象和 `null`。PATCH 的 `locale` 非法时返回 400 `INVALID_LOCALE`（见下方错误表）；PATCH 合并已保存的偏好，允许 `fontSize`（12–32 的整数）、`tabSize`（2–8 的整数）和 `wordWrap`（布尔值）。
+- 草稿返回 `{draft}`，字段为 `problemId`、`version`、`caseId`、`slots`、`revision` 和 `updatedAt`。已发布的不同版本可各自读写，复制由客户端主动提交到目标版本。草稿未创建时，revision 冲突返回 `details.serverRevision: 0`。
+- 运行历史和归档列表都支持 `limit`（默认 20，最大 100）和 `cursor`。历史按运行创建时间与运行 ID 倒序，归档按归档时间与归档 ID 倒序。同一游标限同一账号和列表筛选，进程重启后从第一页开始。无下一页时，`nextCursor` 为 `null`。
+- 两种列表的摘要字段一致，包含运行、题目及用例标识、模式、状态、判题结果、运行时间与归档标识/时间。POST 归档返回 `{submissionId, runId, submittedAt}`。
 
 ## 运行载荷示例
 
@@ -30,10 +37,10 @@ M1 到本地 M3 使用显式本地测试主体。M4 生产形态下，除健康�
 ```json
 {
   "problemId": "002",
-  "version": 1,
+  "version": 2,
   "caseId": "case-1",
   "mode": "D0",
-  "slots": {"system": "只输出符合题面约束的 JSON。"},
+  "slots": {"user": "{{requirement}}\n只输出符合题面约束的 JSON。"},
   "requestParams": {}
 }
 ```
@@ -86,7 +93,7 @@ M1 到本地 M3 使用显式本地测试主体。M4 生产形态下，除健康�
 
 | HTTP | 代表业务码与语义 |
 |---|---|
-| 400 | INVALID_JSON、UNKNOWN_FIELD、INVALID_CURSOR、INVALID_IDEMPOTENCY_KEY |
+| 400 | INVALID_JSON、UNKNOWN_FIELD、INVALID_CURSOR、INVALID_IDEMPOTENCY_KEY、INVALID_LOCALE（`locale` 不是 `zh-CN` 或 `en`，用于题目查询参数与 `PATCH /api/settings`） |
 | 401 | AUTH_REQUIRED、INVALID_CREDENTIALS |
 | 403 | CSRF_INVALID、FORBIDDEN（全局权限不足） |
 | 404 | RESOURCE_NOT_FOUND（含他人资源）；未知题目或运行 |

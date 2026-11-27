@@ -1,7 +1,7 @@
 import { ModelError } from './direct'
+import { t } from '../i18n/locale.ts'
 
-export const english = new URL(location.href).searchParams.get('locale') === 'en'
-export const t = (zh: string, en: string) => english ? en : zh
+export { t }
 
 export function modelMessage(error: unknown): string {
   if (!(error instanceof ModelError)) return t('本次操作失败。', 'The operation failed.')

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["cases"],
+  "additionalProperties": false,
+  "properties": {
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["length", "expectedValid"],
+        "additionalProperties": false,
+        "properties": {
+          "length": {"type": "integer"},
+          "expectedValid": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

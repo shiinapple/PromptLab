@@ -4,11 +4,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
-import java.util.TreeMap;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 import org.springframework.core.io.ResourceLoader;
@@ -24,6 +26,7 @@ public class ProblemCatalog {
     private static final String ROOT = "classpath:/content/problems/";
     private static final String SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema";
     private static final Set<String> LOCALES = Set.of("zh-CN", "en");
+    private static final Set<String> MESSAGE_ROLES = Set.of("system", "user", "assistant");
     private static final Set<String> ASSERTIONS = Set.of("arraySize", "uniqueBy", "mapEquals");
     private static final Set<String> VERDICTS = Set.of("PASSED", "FORMAT_ERROR", "WRONG_ANSWER");
     private static final Pattern VARIABLE = Pattern.compile("\\{\\{([a-zA-Z][a-zA-Z0-9_]*)}}");
@@ -38,15 +41,62 @@ public class ProblemCatalog {
         this.resources = resources;
     }
 
-    public ProblemPack loadPublished(String problemId) {
-        require(problemId != null && problemId.matches("[0-9]{3}"), "Invalid problem ID");
-        JsonNode release = read("releases.json", new TreeMap<>()).path(problemId);
-        if (release.isMissingNode()) {
-            throw new UnknownProblem(problemId);
+    public List<ProblemPack> loadPublished() {
+        return releases().entrySet().stream()
+                .map(entry -> loadVersion(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    public List<ProblemPack> loadReleasedVersions() {
+        var releases = releases();
+        var hashes = read("hashes.json", new TreeMap<>());
+        var packs = new ArrayList<ProblemPack>();
+        for (var release : releases.entrySet()) {
+            String id = release.getKey();
+            var versions = hashes.path(id);
+            for (var entry : versions.properties()) {
+                int version = Integer.parseInt(entry.getKey());
+                if (version > release.getValue()) continue;
+                var pack = loadVersion(id, version);
+                require(pack.contentHash().equals(entry.getValue().stringValue(null)),
+                        "Problem bytes do not match catalog: " + id + "/v" + version);
+                packs.add(pack);
+            }
+            require(packs.stream().anyMatch(pack -> pack.problemId().equals(id) && pack.version() == release.getValue()),
+                    "Missing release hash: " + id);
         }
-        require(release.isIntegralNumber() && release.canConvertToInt() && release.intValue() > 0,
-                "Missing or invalid release for " + problemId);
-        return loadVersion(problemId, release.intValue());
+        return List.copyOf(packs);
+    }
+
+    public ProblemPack loadPublished(String problemId) {
+        return readPublished(problemId, null).pack();
+    }
+
+    public PublishedProblem readPublished(String problemId, Integer requestedVersion) {
+        Integer publishedVersion = problemId == null ? null : releases().get(problemId);
+        if (publishedVersion == null) throw new UnknownProblem(problemId);
+        int version = requestedVersion == null ? publishedVersion : requestedVersion;
+        if (version > publishedVersion
+                || version < publishedVersion && !resources.getResource(
+                        ROOT + problemId + "/v" + version + "/problem.json").exists()) {
+            throw new UnknownProblem(problemId + "/v" + version);
+        }
+        return new PublishedProblem(loadVersion(problemId, version), publishedVersion);
+    }
+
+    private Map<String, Integer> releases() {
+        JsonNode manifest = read("releases.json", new TreeMap<>());
+        require(manifest.isObject(), "Expected a problem release object");
+        Map<String, Integer> releases = new TreeMap<>();
+        for (var entry : manifest.properties()) {
+            String id = entry.getKey();
+            JsonNode release = entry.getValue();
+            require(id.matches("[0-9]{3}") && release.isIntegralNumber()
+                            && release.canConvertToInt() && release.intValue() > 0,
+                    "Invalid release for " + id);
+            releases.put(id, release.intValue());
+        }
+        return releases;
     }
 
     public ProblemPack loadVersion(String problemId, int version) {
@@ -60,70 +110,110 @@ public class ProblemCatalog {
                         && problem.path("version").canConvertToInt() && version == problem.path("version").intValue(),
                 base + "problem.json ID or version does not match the release");
 
-        JsonNode caseIds = problem.path("caseIds");
-        require(caseIds.isArray() && caseIds.size() == 1, base + "Expected one public case");
-        String caseId = caseIds.path(0).stringValue(null);
-        require(caseId != null && caseId.matches("case-[1-9][0-9]*"), base + "Invalid public case ID");
-        JsonNode publicCase = read(base + "cases/" + caseId + ".json", files);
-        require(caseId.equals(publicCase.path("caseId").stringValue(null))
-                        && LOCALES.contains(publicCase.path("inputLocale").stringValue("")),
-                base + "Invalid public case ID or input locale");
-
         Map<String, JsonNode> translations = Map.of(
                 "zh-CN", read(base + "i18n/zh-CN.json", files),
                 "en", read(base + "i18n/en.json", files));
-        validateTemplates(base, problem, publicCase.path("variables"), translations);
+        Set<String> requiredVariables = validateTemplates(base, problem, translations);
         JsonNode schema = read(base + "schema.json", files);
         require(SCHEMA_DRAFT.equals(schema.path("$schema").stringValue(null))
                         && "object".equals(schema.path("type").stringValue(null)),
                 base + "schema.json requires a 2020-12 object schema");
         validateSchema(schema, base + "schema.json", true);
 
-        JsonNode fixtures = read(base + "fixtures/" + caseId + ".json", files);
-        validateExpectations(base, publicCase.path("assertions"), fixtures);
-        return new ProblemPack(problemId, version, caseId, digest(files), problem, translations, publicCase, schema, fixtures);
+        JsonNode caseIds = problem.path("caseIds");
+        require(caseIds.isArray() && !caseIds.isEmpty(), base + "Expected at least one public case");
+        Set<String> seen = new HashSet<>();
+        List<ProblemCase> cases = new ArrayList<>();
+        for (JsonNode entry : caseIds) {
+            String caseId = entry.stringValue(null);
+            require(caseId != null && caseId.matches("case-[1-9][0-9]*") && seen.add(caseId),
+                    base + "Invalid or duplicate public case ID " + caseId);
+            String path = base + "cases/" + caseId + ".json";
+            JsonNode definition = read(path, files);
+            require(caseId.equals(definition.path("caseId").stringValue(null))
+                            && LOCALES.contains(definition.path("inputLocale").stringValue("")),
+                    path + " Invalid public case ID or input locale");
+            validateCaseVariables(path, definition.path("variables"), requiredVariables);
+            JsonNode fixtures = read(base + "fixtures/" + caseId + ".json", files);
+            validateExpectations(path + " ", definition.path("assertions"), fixtures);
+            cases.add(new ProblemCase(caseId, definition, fixtures));
+        }
+        return new ProblemPack(problemId, version, digest(files), problem, translations, schema, List.copyOf(cases));
     }
 
-    private static void validateTemplates(
-            String base, JsonNode problem, JsonNode variables, Map<String, JsonNode> translations) {
+    private static Set<String> validateTemplates(String base, JsonNode problem, Map<String, JsonNode> translations) {
         JsonNode slots = problem.path("slots");
-        require(slots.isObject() && !slots.isEmpty(), base + "Missing slots");
-        Set<String> slotNames = Set.copyOf(slots.propertyNames());
+        require(slots.isObject() && slots.size() == 1, base + "Expected one editable slot");
+        String slotName = slots.propertyNames().iterator().next();
         for (var translation : translations.entrySet()) {
             JsonNode text = translation.getValue();
             String location = base + "i18n/" + translation.getKey() + ".json";
             require(nonBlank(text.path("title")) && nonBlank(text.path("description")),
                     location + " Missing title or description");
             JsonNode defaults = text.path("defaultSlots");
-            require(defaults.isObject() && Set.copyOf(defaults.propertyNames()).equals(slotNames),
+            require(defaults.isObject() && defaults.size() == 1 && defaults.has(slotName),
                     location + " Default slots must match problem slots");
         }
-        Set<String> caseVariables = new HashSet<>();
-        for (var slot : slots.properties()) {
-            String slotName = slot.getKey();
-            Set<String> required = strings(slot.getValue().path("requiredVariables"),
-                    base + "Invalid requiredVariables for " + slotName);
-            caseVariables.addAll(required);
-            for (var translation : translations.entrySet()) {
-                String location = base + "i18n/" + translation.getKey() + ".json";
-                JsonNode template = translation.getValue().path("defaultSlots").path(slotName);
-                require(nonBlank(template), location + " Missing template for " + slotName);
-                var matcher = VARIABLE.matcher(template.stringValue());
-                Set<String> placeholders = new HashSet<>();
-                while (matcher.find()) {
-                    placeholders.add(matcher.group(1));
-                }
-                require(placeholders.equals(required), location + " Variable placeholders do not match " + required);
+        Set<String> required = strings(slots.path(slotName).path("requiredVariables"),
+                base + "Invalid requiredVariables for " + slotName);
+        for (var translation : translations.entrySet()) {
+            String location = base + "i18n/" + translation.getKey() + ".json";
+            JsonNode template = translation.getValue().path("defaultSlots").path(slotName);
+            require(nonBlank(template), location + " Missing template for " + slotName);
+            var matcher = VARIABLE.matcher(template.stringValue());
+            Set<String> placeholders = new HashSet<>();
+            while (matcher.find()) {
+                placeholders.add(matcher.group(1));
             }
+            require(placeholders.equals(required), location + " Variable placeholders do not match " + required);
         }
-        require(variables.isObject() && new HashSet<>(variables.propertyNames()).equals(caseVariables),
-                base + " Case variables do not match required variables " + caseVariables);
-        for (String variable : caseVariables) {
-            require(nonBlank(variables.path(variable)), base + "Missing case variable " + variable);
+
+        Set<String> requiredVariables = validateMessages(problem.path("messages"), slotName, base);
+        requiredVariables.addAll(required);
+        return requiredVariables;
+    }
+
+    private static void validateCaseVariables(String path, JsonNode variables, Set<String> requiredVariables) {
+        require(variables.isObject() && new HashSet<>(variables.propertyNames()).equals(requiredVariables),
+                path + " Case variables do not match required variables " + requiredVariables);
+        for (String variable : requiredVariables) {
+            require(nonBlank(variables.path(variable)), path + " Missing case variable " + variable);
         }
     }
 
-    // Validate the closed subset used by the first pack. Full instance validation belongs to the judge.
+    private static Set<String> validateMessages(JsonNode messages, String slotName, String base) {
+        require(messages.isArray() && !messages.isEmpty(), base + "Missing messages");
+        Set<String> variables = new HashSet<>();
+        int slotReferences = 0;
+        for (int messageIndex = 0; messageIndex < messages.size(); messageIndex++) {
+            JsonNode message = messages.path(messageIndex);
+            String location = base + "problem.json/messages/" + messageIndex;
+            require(MESSAGE_ROLES.contains(message.path("role").stringValue("")), location + " Unknown message role");
+            JsonNode parts = message.path("parts");
+            require(parts.isArray(), location + " Invalid message parts");
+            for (int partIndex = 0; partIndex < parts.size(); partIndex++) {
+                JsonNode part = parts.path(partIndex);
+                String partLocation = location + "/parts/" + partIndex;
+                switch (part.path("type").stringValue("")) {
+                    case "fixedText" -> require(part.path("text").isString(), partLocation + " Invalid fixed text");
+                    case "caseVariable" -> {
+                        JsonNode name = part.path("name");
+                        require(nonBlank(name), partLocation + " Invalid case variable name");
+                        variables.add(name.stringValue());
+                    }
+                    case "slot" -> {
+                        require(slotName.equals(part.path("name").stringValue(null)), partLocation + " Unknown slot");
+                        slotReferences++;
+                    }
+                    default -> throw new IllegalArgumentException(partLocation + " Unknown message part type");
+                }
+            }
+        }
+        require(slotReferences == 1, base + " Expected exactly one reference to slot " + slotName);
+        return variables;
+    }
+
+    // Validate the supported schema subset before passing it to the judge.
     private static void validateSchema(JsonNode schema, String path, boolean root) {
         require(schema.isObject(), path + " must be a schema object");
         Set<String> keys = new HashSet<>(schema.propertyNames());
@@ -139,10 +229,15 @@ public class ProblemCatalog {
                         path + " Invalid closed object schema");
                 JsonNode properties = schema.path("properties");
                 Set<String> required = strings(schema.path("required"), path + " Invalid required fields");
-                require(new HashSet<>(properties.propertyNames()).equals(required),
-                        path + " Required fields must match declared properties");
+                require(properties.propertyNames().containsAll(required),
+                        path + " Required fields must be declared in properties");
                 for (var property : properties.properties()) {
-                    validateSchema(property.getValue(), path + "/" + property.getKey(), false);
+                    String name = property.getKey();
+                    JsonNode child = property.getValue();
+                    if (child.isObject() && child.isEmpty() && !required.contains(name)) {
+                        continue;
+                    }
+                    validateSchema(child, path + "/" + name, false);
                 }
             }
             case "array" -> {
@@ -150,12 +245,16 @@ public class ProblemCatalog {
                 validateSchema(schema.path("items"), path + "/items", false);
             }
             case "integer", "boolean" -> require(keys.equals(Set.of("type")), path + " Invalid scalar schema");
+            case "string" -> require(keys.equals(Set.of("type"))
+                            || keys.equals(Set.of("type", "pattern"))
+                            && "\\S".equals(schema.path("pattern").stringValue(null)),
+                    path + " Invalid string schema");
             default -> throw new IllegalArgumentException(path + " Unsupported schema type");
         }
     }
 
     private static void validateExpectations(String base, JsonNode assertions, JsonNode fixtures) {
-        require(assertions.isArray() && !assertions.isEmpty(), base + "Missing case assertions");
+        require(assertions.isArray(), base + "Missing case assertions");
         Set<String> assertionIds = new HashSet<>();
         for (JsonNode assertion : assertions) {
             require(nonBlank(assertion.path("id")) && assertionIds.add(assertion.path("id").stringValue())
@@ -224,8 +323,23 @@ public class ProblemCatalog {
         }
     }
 
-    public record ProblemPack(
-            String problemId, int version, String caseId, String contentHash, JsonNode problem, Map<String, JsonNode> translations,
-            JsonNode publicCase, JsonNode schema, JsonNode fixtures) {
+    public record PublishedProblem(ProblemPack pack, int publishedVersion) {
+    }
+
+    public record ProblemCase(String caseId, JsonNode definition, JsonNode fixtures) {
+        public JsonNode variables() {
+            return definition.path("variables");
+        }
+
+        public JsonNode assertions() {
+            return definition.path("assertions");
+        }
+    }
+
+    public record ProblemPack(String problemId, int version, String contentHash, JsonNode problem,
+                              Map<String, JsonNode> translations, JsonNode schema, List<ProblemCase> cases) {
+        public ProblemCase findCase(String caseId) {
+            return cases.stream().filter(item -> item.caseId().equals(caseId)).findFirst().orElse(null);
+        }
     }
 }
