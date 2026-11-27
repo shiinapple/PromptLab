@@ -55,6 +55,13 @@ public final class ApiInput {
         return node.intValue();
     }
 
+    public static String requireLocale(String value) {
+        if (!"zh-CN".equals(value) && !"en".equals(value)) {
+            throw new PracticeError(400, "INVALID_LOCALE");
+        }
+        return value;
+    }
+
     public static Integer problemVersion(String value) {
         if (value == null) return null;
         if (!value.matches("[0-9]+")) throw new PracticeError(400, "INVALID_REQUEST");

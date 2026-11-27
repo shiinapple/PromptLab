@@ -6,6 +6,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -54,22 +55,25 @@ public class PracticeController {
     }
 
     @GetMapping("/api/problems")
-    ResponseEntity<?> problems(HttpServletRequest request, @RequestParam(defaultValue = "zh-CN") String locale) throws IOException {
+    ResponseEntity<?> problems(HttpServletRequest request,
+            @RequestParam(name = "locale", required = false) String requestedLocale) throws IOException {
         owner(request);
+        String locale = requireLocale(Objects.requireNonNullElse(requestedLocale, "zh-CN"));
         var items = catalog.loadPublished().stream().map(pack -> Map.of(
-                "problemId", pack.problemId(), "version", pack.version(), "title", localized(pack, locale).path("title"),
+                "problemId", pack.problemId(), "version", pack.version(), "title", pack.translations().get(locale).path("title"),
                 "category", pack.problem().path("category"), "difficulty", pack.problem().path("difficulty"))).toList();
         return ok(Map.of("items", items));
     }
 
     @GetMapping("/api/problems/{id}")
     ResponseEntity<?> problem(HttpServletRequest request, @PathVariable String id,
-            @RequestParam(defaultValue = "zh-CN") String locale,
+            @RequestParam(name = "locale", required = false) String requestedLocale,
             @RequestParam(name = "version", required = false) String version) throws IOException {
         owner(request);
+        String locale = requireLocale(Objects.requireNonNullElse(requestedLocale, "zh-CN"));
         var published = catalog.readPublished(id, problemVersion(version));
         var pack = published.pack();
-        var text = localized(pack, locale);
+        var text = pack.translations().get(locale);
         return ok(Map.of(
                 "problemId", pack.problemId(), "version", pack.version(), "publishedVersion", published.publishedVersion(),
                 "locale", locale,
@@ -163,12 +167,6 @@ public class PracticeController {
             }
         }
         return accepted;
-    }
-
-    private static JsonNode localized(ProblemCatalog.ProblemPack pack, String locale) {
-        JsonNode text = pack.translations().get(locale);
-        if (text == null) throw new PracticeError(400, "INVALID_LOCALE");
-        return text;
     }
 
     private static void local(HttpServletRequest request) throws IOException {

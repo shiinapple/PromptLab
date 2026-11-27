@@ -2,6 +2,7 @@ package cn.shiinapple.promptpractice.practice;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doReturn;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -13,6 +14,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -32,6 +34,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import cn.shiinapple.promptpractice.judge.JudgeService;
@@ -51,7 +54,7 @@ class PracticeIntegrationTest {
     DataSource data;
     @Autowired
     PlatformTransactionManager transactionManager;
-    @Autowired
+    @MockitoSpyBean
     ProblemCatalog catalog;
     @Autowired
     JudgeService judge;
@@ -74,9 +77,11 @@ class PracticeIntegrationTest {
         var english = get("/api/problems/002?locale=en").body();
         var chinese = get("/api/problems/002").body();
         assertThat(english.path("title").stringValue()).isEqualTo("Requirements to Test Cases");
+        assertThat(chinese.path("locale").stringValue()).isEqualTo("zh-CN");
         assertThat(english.at("/cases/0/variables")).isEqualTo(chinese.at("/cases/0/variables"));
         assertThat(english.toString()).doesNotContain("assertions", "boundary-mapping", "schema");
         assertThat(get("/api/problems").body().at("/items/1/problemId").stringValue()).isEqualTo("002");
+        assertThat(get("/api/problems").body()).isEqualTo(get("/api/problems?locale=zh-CN").body());
         String key = UUID.randomUUID().toString();
         var original = create(key, "查看：{{requirement}}");
         assertThat(original.status()).isEqualTo(201);
@@ -100,6 +105,34 @@ class PracticeIntegrationTest {
         assertThat(reloaded.path("rawOutput").stringValue()).isEqualTo(raw);
         assertThat(reloaded.path("messages")).isEqualTo(original.body().path("messages"));
         assertThat(next.body().path("messages")).isNotEqualTo(reloaded.path("messages"));
+    }
+
+    @Test
+    void rejectsInvalidLocalesOnBothProblemEndpoints() throws Exception {
+        for (String path : List.of("/api/problems", "/api/problems/002")) {
+            for (String locale : List.of("", "fr", "EN", "%20en")) {
+                String url = path + "?locale=" + locale;
+                var response = get(url);
+                assertThat(response.status()).as(url).isEqualTo(400);
+                assertThat(response.body().path("code").stringValue()).as(url).isEqualTo("INVALID_LOCALE");
+            }
+        }
+    }
+
+    @Test
+    void validatesLocaleWhenNoProblemsArePublished() throws Exception {
+        doReturn(List.of()).when(catalog).loadPublished();
+        var response = get("/api/problems");
+        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.body().path("items").isArray()).isTrue();
+        assertThat(response.body().path("items")).isEmpty();
+
+        for (String locale : List.of("", "fr")) {
+            String url = "/api/problems?locale=" + locale;
+            var invalid = get(url);
+            assertThat(invalid.status()).as(url).isEqualTo(400);
+            assertThat(invalid.body().path("code").stringValue()).as(url).isEqualTo("INVALID_LOCALE");
+        }
     }
 
     @Test

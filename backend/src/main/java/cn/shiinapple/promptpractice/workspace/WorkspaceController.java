@@ -41,8 +41,9 @@ class WorkspaceController {
         ApiInput.fields(body, Set.of("locale", "editorPrefs"));
         String locale = null;
         if (body.has("locale")) {
-            locale = ApiInput.string(body.path("locale"), 16);
-            if (!Set.of("zh-CN", "en").contains(locale)) throw new PracticeError(400, "INVALID_LOCALE");
+            var value = body.path("locale");
+            if (!value.isString()) throw new PracticeError(400, "INVALID_LOCALE");
+            locale = ApiInput.requireLocale(ApiInput.string(value, 16));
         }
         String prefs = "{}";
         if (body.has("editorPrefs")) {

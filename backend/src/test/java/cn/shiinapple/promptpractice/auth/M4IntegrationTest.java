@@ -134,7 +134,9 @@ class M4IntegrationTest {
         assertEquals("zh-CN", get("/api/settings", a).body.path("locale").asText());
         assertEquals(403, send("PATCH", "/api/settings", a.cookie, null, Map.of("locale", "en")).status);
         assertEquals(400, write("PATCH", "/api/settings", a, Map.of("editorPrefs", Map.of("secret", "no"))).status);
-        assertEquals(400, write("PATCH", "/api/settings", a, Map.of("locale", "fr")).status);
+        var invalidLocale = write("PATCH", "/api/settings", a, Map.of("locale", "fr"));
+        assertEquals(400, invalidLocale.status);
+        assertEquals("INVALID_LOCALE", invalidLocale.body.path("code").asText());
         assertEquals(400, write("PATCH", "/api/settings", a, Map.of("editorPrefs", Map.of("wordWrap", "true"))).status);
         var saved = write("PATCH", "/api/settings", a, Map.of("locale", "en", "editorPrefs", Map.of("fontSize", 18)));
         assertEquals(200, saved.status);
@@ -145,6 +147,30 @@ class M4IntegrationTest {
         assertTrue(merged.body.path("editorPrefs").path("wordWrap").asBoolean());
         assertEquals("zh-CN", get("/api/settings", b).body.path("locale").asText());
         assertEquals(404, get("/api/users/" + get("/api/me", a).body.path("userId").asText() + "/settings", b).status);
+    }
+
+    @Test
+    void rejectsEmptyAndNonStringLocalesInSettings() throws Exception {
+        var session = login(createUser());
+        var values = java.util.Arrays.asList("", 1, true, Map.of(), java.util.List.of(), null);
+        for (Object locale : values) {
+            var body = json.createObjectNode();
+            body.set("locale", json.valueToTree(locale));
+            var response = write("PATCH", "/api/settings", session, body);
+            assertEquals(400, response.status, body::toString);
+            assertEquals("INVALID_LOCALE", response.body.path("code").asText(), body::toString);
+        }
+    }
+
+    @Test
+    void keepsSettingsFieldAndBodySizeLimits() throws Exception {
+        var session = login(createUser());
+        var oversizedLocale = write("PATCH", "/api/settings", session, Map.of("locale", "中".repeat(6)));
+        assertEquals(413, oversizedLocale.status);
+        assertEquals("PAYLOAD_TOO_LARGE", oversizedLocale.body.path("code").asText());
+        var oversizedBody = write("PATCH", "/api/settings", session, Map.of("locale", " ".repeat(2048)));
+        assertEquals(413, oversizedBody.status);
+        assertEquals("PAYLOAD_TOO_LARGE", oversizedBody.body.path("code").asText());
     }
 
     @Test
