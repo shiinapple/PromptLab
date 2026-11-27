@@ -16,10 +16,10 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
+import java.net.InetAddress;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -32,7 +32,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
-@Profile("local-practice")
 public class PracticeRuns implements ApplicationRunner {
     static final JsonMapper JSON = JsonMapper.builder().build();
     private static final long TTL = Duration.ofHours(24).toMillis();
@@ -47,24 +46,42 @@ public class PracticeRuns implements ApplicationRunner {
     private final TransactionTemplate write;
     private final ProblemCatalog catalog;
     private final JudgeService judge;
-    private final String owner;
+    private final String localOwner;
     private final Clock clock;
 
     @Autowired
     PracticeRuns(JdbcClient jdbc, PlatformTransactionManager transactions, ProblemCatalog catalog, JudgeService judge,
-            @Value("${prompt-practice.local-subject:local-practice}") String owner) {
-        this(jdbc, transactions, catalog, judge, owner, Clock.systemUTC());
+            Environment environment) {
+        this(jdbc, transactions, catalog, judge, localSubject(environment), Clock.systemUTC());
     }
 
     PracticeRuns(JdbcClient jdbc, PlatformTransactionManager transactions, ProblemCatalog catalog, JudgeService judge,
             String owner, Clock clock) {
-        if (!owner.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("Invalid local subject");
+        if (owner != null && !owner.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("Invalid local subject");
         this.jdbc = jdbc;
         this.write = new TransactionTemplate(transactions);
         this.catalog = catalog;
         this.judge = judge;
-        this.owner = owner;
+        this.localOwner = owner;
         this.clock = clock;
+    }
+
+    private static String localSubject(Environment environment) {
+        boolean local = environment.matchesProfiles("local-practice");
+        if (local && environment.matchesProfiles("production", "prod")
+                || !local && environment.containsProperty("prompt-practice.local-subject")) {
+            throw new IllegalStateException("Local subject configuration is only allowed in local-practice");
+        }
+        if (!local) return null;
+        InetAddress address = environment.getProperty("server.address", InetAddress.class);
+        if (address == null || !address.isLoopbackAddress()) {
+            throw new IllegalStateException("Local practice requires a loopback bind address");
+        }
+        return environment.getProperty("prompt-practice.local-subject", "local-practice");
+    }
+
+    String localOwner() {
+        return localOwner;
     }
 
     @Override
@@ -72,8 +89,10 @@ public class PracticeRuns implements ApplicationRunner {
         var packs = catalog.loadPublished();
         inWrite(() -> {
             long now = clock.millis();
-            jdbc.sql("INSERT INTO users(id, created_at) VALUES (:owner, :now) ON CONFLICT DO NOTHING")
-                    .param("owner", owner).param("now", now).update();
+            if (localOwner != null) {
+                jdbc.sql("INSERT INTO users(id, created_at) VALUES (:owner, :now) ON CONFLICT DO NOTHING")
+                        .param("owner", localOwner).param("now", now).update();
+            }
             for (var pack : packs) {
                 jdbc.sql("""
                         INSERT INTO problem_versions(problem_id, version, content_hash, published_at)
@@ -94,9 +113,13 @@ public class PracticeRuns implements ApplicationRunner {
     }
 
     Created create(String key, Create intent) {
+        return create(localOwner, key, intent);
+    }
+
+    Created create(String owner, String key, Create intent) {
         String digest = digest(List.of("create-v1", intent.problemId(), intent.version(), intent.caseId(),
                 intent.mode(), new TreeMap<>(intent.slots()), Map.of()));
-        Stored existing = byKey(key);
+        Stored existing = byKey(owner, key);
         if (existing != null) return reused(existing, digest);
 
         var pack = catalog.loadPublished(intent.problemId());
@@ -113,7 +136,7 @@ public class PracticeRuns implements ApplicationRunner {
         String slots = JSON.writeValueAsString(new TreeMap<>(intent.slots()));
         String assembled = JSON.writeValueAsString(messages);
         return inWrite(() -> {
-            Stored winner = byKey(key);
+            Stored winner = byKey(owner, key);
             if (winner != null) return reused(winner, digest);
             long now = clock.millis();
             String snapshotId = UUID.randomUUID().toString();
@@ -132,18 +155,26 @@ public class PracticeRuns implements ApplicationRunner {
                     """).param("id", runId).param("owner", owner).param("snapshot", snapshotId)
                     .param("mode", intent.mode()).param("key", key).param("digest", digest)
                     .param("now", now).param("expires", now + TTL).update();
-            return new Created(true, byId(runId).view(now));
+            return new Created(true, byId(owner, runId).view(now));
         });
     }
 
     Run get(String id) {
-        return byId(id).view(clock.millis());
+        return get(localOwner, id);
+    }
+
+    Run get(String owner, String id) {
+        return byId(owner, id).view(clock.millis());
     }
 
     Run submit(String id, Submission intent) {
+        return submit(localOwner, id, intent);
+    }
+
+    Run submit(String owner, String id, Submission intent) {
         String digest = digest(List.of("result-v1", intent.status(), intent.rawOutput() == null ? "" : intent.rawOutput(),
                 intent.failureCode() == null ? "" : intent.failureCode(), new TreeMap<>(intent.reported())));
-        Stored before = byId(id);
+        Stored before = byId(owner, id);
         Run replay = existingResult(before, digest, clock.millis());
         if (replay != null) return replay;
 
@@ -174,7 +205,7 @@ public class PracticeRuns implements ApplicationRunner {
                     """).param("status", intent.status()).param("digest", digest).param("raw", intent.rawOutput())
                     .param("meta", reported).param("failureCode", intent.failureCode()).param("verdict", verdict)
                     .param("checks", checks).param("now", now).param("id", id).param("owner", owner).update();
-            Stored winner = byId(id);
+            Stored winner = byId(owner, id);
             return updated == 1 ? winner.view(now) : existingResult(winner, digest, now);
         });
     }
@@ -193,12 +224,12 @@ public class PracticeRuns implements ApplicationRunner {
         return new Created(false, run.view(clock.millis()));
     }
 
-    private Stored byKey(String key) {
+    private Stored byKey(String owner, String key) {
         return jdbc.sql(SELECT + " r.idempotency_key = :key").param("owner", owner).param("key", key)
                 .query((rs, row) -> stored(rs)).optional().orElse(null);
     }
 
-    private Stored byId(String id) {
+    private Stored byId(String owner, String id) {
         return jdbc.sql(SELECT + " r.id = :id").param("owner", owner).param("id", id)
                 .query((rs, row) -> stored(rs)).optional().orElseThrow(() -> new PracticeError(404, "RESOURCE_NOT_FOUND"));
     }

@@ -34,10 +34,10 @@ class SqliteIntegrationTest {
         Path file = directory.resolve("data with spaces").resolve("baseline.sqlite3");
         try (var context = start(file)) {
             assertTrue(Files.isRegularFile(file));
-            assertEquals("2", version(context));
+            assertEquals("3", version(context));
         }
         try (var context = start(file)) {
-            assertEquals("2", version(context));
+            assertEquals("3", version(context));
             assertEquals(1L, context.getBean(JdbcClient.class)
                     .sql("SELECT count(*) FROM flyway_schema_history WHERE version = '1'")
                     .query(Long.class).single());
@@ -47,15 +47,18 @@ class SqliteIntegrationTest {
     @Test
     void upgradesTheBaselineWithoutLosingExistingData() {
         Path file = directory.resolve("upgrade.sqlite3");
-        try (var context = start(file, "--spring.flyway.target=1")) {
+        try (var context = start(file, "--spring.flyway.target=2")) {
             var jdbc = context.getBean(JdbcClient.class);
             jdbc.sql("CREATE TABLE fixture (id INTEGER PRIMARY KEY, value TEXT NOT NULL)").update();
             jdbc.sql("INSERT INTO fixture VALUES (1, 'existing row')").update();
-            assertEquals("1", version(context));
+            jdbc.sql("INSERT INTO users(id, created_at) VALUES ('existing-local', 0)").update();
+            assertEquals("2", version(context));
         }
         try (var context = start(file, "--spring.flyway.locations=classpath:db/migration,classpath:db/upgrade")) {
             var jdbc = context.getBean(JdbcClient.class);
-            assertEquals("3", version(context));
+            assertEquals("1000", version(context));
+            assertEquals("DISABLED", jdbc.sql("SELECT state FROM users WHERE id = 'existing-local'")
+                    .query(String.class).single());
             assertEquals(0L, jdbc.sql("SELECT count(*) FROM runs").query(Long.class).single());
             assertEquals("existing row", jdbc.sql("SELECT value FROM fixture WHERE id = 1")
                     .query(String.class).single());
