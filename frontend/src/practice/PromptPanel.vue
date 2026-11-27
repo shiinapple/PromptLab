@@ -23,11 +23,12 @@ const prompt = defineModel<string>({ required: true })
 <template>
   <section class="panel">
     <h2><label for="prompt">{{ role === 'system' ? 'System Prompt' : 'Prompt' }}</label></h2>
-    <textarea id="prompt" v-model="prompt" rows="6" spellcheck="false" />
-    <p v-if="preview.error" class="field-error" aria-live="polite">{{ preview.error }}</p>
+    <p class="help" id="prompt-hint">{{ t('编辑后可随时恢复模板；未保存的内容切换语言时保留。', 'You can restore the template at any time. Unsaved text stays when you switch language.') }}</p>
+    <textarea id="prompt" v-model="prompt" rows="6" spellcheck="false" aria-describedby="prompt-hint" />
+    <p v-if="preview.error" class="field-error" role="alert">{{ preview.error }}</p>
     <details>
       <summary>{{ t('请求预览', 'Request preview') }}</summary>
-      <pre id="preview">{{ preview.messages ? JSON.stringify(preview.messages, null, 2) : '请先修正 Prompt。' }}</pre>
+      <pre id="preview">{{ preview.messages ? JSON.stringify(preview.messages, null, 2) : t('请先修正 Prompt。', 'Fix the prompt first.') }}</pre>
     </details>
     <div class="run-options" role="group" :aria-label="t('运行方式', 'Run mode')">
       <button type="button" :aria-pressed="mode === 'DIRECT'" :disabled="busy" @click="$emit('update:mode', 'DIRECT')">

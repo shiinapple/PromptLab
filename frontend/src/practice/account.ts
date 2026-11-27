@@ -1,4 +1,5 @@
 import { getJson as getJsonPublic, post, refreshCsrf, send, useLocalCsrf } from './api'
+import type { Locale } from '../i18n/locale'
 
 export type Profile = { userId: string; email: string }
 export type DraftSlots = Record<string, string>
@@ -38,6 +39,10 @@ export async function detectAccountMode(): Promise<boolean> {
 }
 
 export const me = () => getJsonPublic<Profile>('/api/me')
+
+export type Settings = { locale: Locale; editorPrefs: Record<string, unknown>; updatedAt: string | null }
+export const readSettings = () => getJsonPublic<Settings>('/api/settings')
+export const saveLocale = (locale: Locale) => send<Settings>('PATCH', '/api/settings', { locale })
 
 export async function login(email: string, password: string) {
   await post<void>('/api/auth/login', { email, password })

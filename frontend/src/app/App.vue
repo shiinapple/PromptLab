@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { usePractice } from '../practice/usePractice'
-import { runTitle } from '../practice/labels'
+import { runTitle, statusSymbol } from '../practice/labels'
 import ProblemPanel from '../practice/ProblemPanel.vue'
 import PromptPanel from '../practice/PromptPanel.vue'
 import DirectRunSection from '../practice/DirectRunSection.vue'
@@ -10,34 +10,63 @@ import CheckList from '../practice/CheckList.vue'
 import HistoryPanel from '../practice/HistoryPanel.vue'
 import LoginForm from '../account/LoginForm.vue'
 import ModelSettings from '../model/ModelSettings.vue'
-import { t } from '../model/copy'
+import OnboardingBanner from '../guide/OnboardingBanner.vue'
+import { dismissGuide, guideDismissed } from '../guide/guide'
+import { getLocale, t, type Locale } from '../i18n/locale'
 
 const {
-  model: { store, transport, connection, syncConnection },
+  model: { store, transport, connection, syncConnection, ready },
   feedback: { busy, error, notice, action },
-  direct: { text: directText, stage, seconds, pending, save, stop },
+  direct: { text: directText, stage, seconds, pending, save, stop, lastFailure },
   manual: { raw, confirmed, edit, importFile, grade },
   problems, problem, historical, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
   load, selectProblem, selectCase, setMode, freeze, copyText, download,
-  accountMode, profile, authRequired, conflict, draftSaving, historyRevision, openRun, signedIn, signOut, useServerDraft, overwriteDraft, copyDraftToCurrent,
+  accountMode, profile, authRequired, conflict, draftSaving, historyRevision, openRun, signedIn, signOut, useServerDraft, overwriteDraft, copyDraftToCurrent, changeLocale,
 } = usePractice()
+
+const currentLocale = computed(() => getLocale())
+const otherLocale = computed<Locale>(() => (currentLocale.value === 'en' ? 'zh-CN' : 'en'))
 
 const title = computed(() => run.value ? runTitle(run.value, stage.value, !!pending.value, runGrading.value) : '')
 const failed = computed(() => run.value?.status === 'FAILED'
   || run.value?.verdict === 'FORMAT_ERROR' || run.value?.verdict === 'WRONG_ANSWER')
+const symbol = computed(() => (run.value ? statusSymbol(run.value.verdict, failed.value) : ''))
+
+// 引导：未配置模型时自动显示，关闭后按账号记住；undefined 表示按默认规则决定。
+const guideOpen = ref<boolean>()
+const guideUser = computed(() => (accountMode.value ? profile.value?.userId : undefined))
+const showGuide = computed(() => guideOpen.value ?? (!ready() && !guideDismissed(guideUser.value)))
+watch(guideUser, () => { guideOpen.value = undefined })
+function closeGuide() {
+  dismissGuide(guideUser.value)
+  guideOpen.value = false
+}
+
+// 关闭设置后把焦点还给触发按钮，避免键盘用户丢失位置。
+async function closeSettings() {
+  settingsOpen.value = false
+  await nextTick()
+  document.getElementById('settings-toggle')?.focus()
+}
 </script>
 
 <template>
   <header class="site-header">
     <div>
       <span class="brand">Prompt Practice</span>
-      <button type="button" :disabled="busy" :aria-expanded="settingsOpen" aria-controls="model-settings" @click="settingsOpen = !settingsOpen">
+      <button id="settings-toggle" type="button" :disabled="busy" :aria-expanded="settingsOpen" aria-controls="model-settings" @click="settingsOpen = !settingsOpen">
         {{ t('模型设置', 'Model settings') }}
       </button>
+      <button type="button" :disabled="busy" @click="guideOpen = true">{{ t('查看引导', 'Show guide') }}</button>
     </div>
-    <div v-if="accountMode && profile">
-      <span class="meta">{{ profile.email }}</span>
-      <button type="button" :disabled="busy" @click="signOut">{{ t('退出', 'Sign out') }}</button>
+    <div>
+      <button type="button" :disabled="busy || loading" :lang="otherLocale" @click="changeLocale(otherLocale)">
+        {{ otherLocale === 'en' ? 'English' : '中文' }}
+      </button>
+      <template v-if="accountMode && profile">
+        <span class="meta">{{ profile.email }}</span>
+        <button type="button" :disabled="busy" @click="signOut">{{ t('退出', 'Sign out') }}</button>
+      </template>
     </div>
   </header>
   <main>
@@ -52,8 +81,10 @@ const failed = computed(() => run.value?.status === 'FAILED'
     <div v-if="error" class="feedback error" role="alert">{{ error }}</div>
     <p v-if="notice" class="feedback" role="status">{{ notice }}</p>
     <button v-if="!problem && !loading" type="button" @click="load">{{ t('重新加载', 'Reload') }}</button>
+    <OnboardingBanner v-if="showGuide" @configure="settingsOpen = true; guideOpen = false"
+      @use-manual="setMode('D0'); closeGuide()" @close="closeGuide" />
     <ModelSettings v-if="settingsOpen" id="model-settings" :store="store" :transport="transport"
-      @saved="syncConnection" @close="settingsOpen = false" />
+      @saved="syncConnection" @close="closeSettings" />
     <nav v-if="problems.length" class="run-options" :aria-label="t('题目列表', 'Problems')">
       <button v-for="item in problems" :key="item.problemId" type="button" :disabled="loading"
         :aria-pressed="problem?.problemId === item.problemId" @click="selectProblem(item.problemId)">
@@ -78,7 +109,7 @@ const failed = computed(() => run.value?.status === 'FAILED'
           <div class="section-heading">
             <h2 id="run-heading">{{ t('本次运行', 'Current run') }} ·
               {{ run.mode === 'DIRECT' ? t('直连', 'Direct') : t('手动', 'Manual') }} · {{ run.caseId }}</h2>
-            <span id="run-status" class="mode" :class="{ passed: run.verdict === 'PASSED', failed }">
+            <span id="run-status" class="mode" role="status" :class="{ passed: run.verdict === 'PASSED', failed }" :data-symbol="symbol">
               {{ title }}
             </span>
           </div>
@@ -94,7 +125,7 @@ const failed = computed(() => run.value?.status === 'FAILED'
             {{ t('当前草稿有改动，本次运行仍使用冻结的请求。', 'The draft has changed. This run uses the frozen request.') }}
           </p>
           <DirectRunSection v-if="run.mode === 'DIRECT'" :run="run" :selected-mode="mode" :busy="busy" :error="error"
-            :stage="stage" :seconds="seconds" :unsaved="!!pending" :text="directText"
+            :stage="stage" :seconds="seconds" :unsaved="!!pending" :text="directText" :failure="lastFailure"
             @stop="stop" @retry-save="action(save)" @use-manual="setMode('D0')" />
           <ManualRunSection v-if="run.mode === 'D0' && run.status === 'PENDING'" v-model:confirmed="confirmed"
             :raw="raw" :busy="busy" @copy-request="copyText(requestJson, t('请求已复制。', 'Request copied.'))"
@@ -155,6 +186,7 @@ input[type='checkbox'] { accent-color: var(--color-primary); }
   button:enabled:active { transform: scale(var(--scale-pressed)); }
 }
 .mode { color: var(--color-primary); background: var(--color-success-surface); padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); font-size: var(--font-size-message); font-weight: var(--font-weight-medium); }
+#run-status[data-symbol]::before { content: attr(data-symbol) ' '; }
 #run-status:not(.passed) { color: var(--color-secondary-ink); background: var(--color-secondary); }
 #run-status.failed { color: var(--color-error-text); background: var(--color-error-surface); }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
@@ -171,3 +203,12 @@ input[type='file'] { max-width: 100%; }
   main, .panel { padding: var(--space-4); }
 }
 </style>
+pre { max-width: 100%; overflow-x: auto; }
+/* 窄屏断点 768px（48rem）：与 tokens.css 注释及 app/useNarrow.ts 保持一致。 */
+@media (max-width: 48rem) {
+  main { padding: var(--space-5) var(--space-4); }
+  .site-header div { flex-wrap: wrap; padding: var(--space-3) var(--space-4); }
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .panel { padding: var(--space-4); }
+  .actions { justify-content: flex-start; }
+}

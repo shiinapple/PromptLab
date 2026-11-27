@@ -15,10 +15,18 @@ const error = ref('')
 const loading = ref(false)
 
 const statusLabel = (item: HistoryItem) => {
-  if (item.verdict === 'PASSED') return t('通过', 'Passed')
-  if (item.verdict) return t('未通过', 'Not passed')
-  return item.status
+  if (item.verdict === 'PASSED') return `✓ ${t('通过', 'Passed')}`
+  if (item.verdict) return `✕ ${t('未通过', 'Not passed')}`
+  switch (item.status) {
+    case 'PENDING': return t('未完成', 'Unfinished')
+    case 'COMPLETED': return t('已完成', 'Completed')
+    case 'FAILED': return `✕ ${t('执行失败', 'Request failed')}`
+    case 'CANCELED': return t('已取消', 'Canceled')
+    case 'EXPIRED': return t('已过期', 'Expired')
+    default: return item.status
+  }
 }
+const modeLabel = (mode: HistoryItem['mode']) => (mode === 'D0' ? t('手动', 'Manual') : t('直连', 'Direct'))
 const archivedIds = computed(() => new Set(archived.value.map(item => item.runId)))
 
 function merge(page: Page<HistoryItem>, target: HistoryItem[]) {
@@ -94,7 +102,7 @@ watch(() => [props.problemId, props.revision], refresh, { immediate: true })
     <p v-if="!runs.length" class="help">{{ t('暂无运行记录。', 'No runs yet.') }}</p>
     <ul class="runs">
       <li v-for="item in runs" :key="item.runId">
-        <span class="meta">v{{ item.version }} · {{ item.caseId }} · {{ item.mode }} · {{ statusLabel(item) }}</span>
+        <span class="meta">v{{ item.version }} · {{ item.caseId }} · {{ modeLabel(item.mode) }} · {{ statusLabel(item) }}</span>
         <span class="row-actions">
           <button type="button" :disabled="busy" @click="emit('open', item.runId)">{{ t('打开', 'Open') }}</button>
           <button v-if="item.submissionId || item.status === 'COMPLETED'" type="button" :disabled="busy" @click="toggle(item)">
@@ -108,7 +116,7 @@ watch(() => [props.problemId, props.revision], refresh, { immediate: true })
     <p v-if="!archived.length" class="help">{{ t('暂无归档。', 'Nothing archived.') }}</p>
     <ul class="runs">
       <li v-for="item in archived" :key="item.runId" :data-archived="archivedIds.has(item.runId)">
-        <span class="meta">{{ item.problemId }} · v{{ item.version }} · {{ item.caseId }} · {{ statusLabel(item) }}</span>
+        <span class="meta">{{ item.problemId }} · v{{ item.version }} · {{ item.caseId }} · {{ modeLabel(item.mode) }} · {{ statusLabel(item) }}</span>
         <span class="row-actions">
           <button type="button" :disabled="busy" @click="emit('open', item.runId)">{{ t('打开', 'Open') }}</button>
           <button type="button" :disabled="busy" @click="toggle(item)">{{ t('取消归档', 'Unarchive') }}</button>

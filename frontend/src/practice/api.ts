@@ -1,5 +1,6 @@
 import type { Message, MessagePlan } from './messages'
 import { editableSlot } from './slot'
+import { apiErrorMessage, networkErrorMessage } from '../i18n/errors.ts'
 
 export type Grading = 'STRUCTURE_ONLY' | 'RULES'
 export type ProblemSummary = {
@@ -41,29 +42,10 @@ export type Run = {
   failureCode: RunFailure | null
 }
 
-const errors: Record<string, string> = {
-  RESOURCE_NOT_FOUND: '找不到请求的数据。请确认后端已使用 local-practice 模式启动。',
-  VERSION_CHANGED: '题目版本已更新，请重新加载。',
-  INVALID_CASE: '找不到当前用例。',
-  INVALID_SLOT: 'Prompt 无效，请检查必需变量及文字内容。',
-  RUN_EXPIRED: '本次运行已过期，请新建运行。',
-  RESULT_CONFLICT: '本次运行已有结果。请刷新查看，或新建运行。',
-  IDEMPOTENCY_CONFLICT: '本次请求与已创建的运行不一致，请重新创建。',
-  PAYLOAD_TOO_LARGE: '输入超过长度或结构限制。',
-  TEMPORARILY_UNAVAILABLE: '服务暂时繁忙，请重试。',
-  INVALID_RESULT: '提交的正文无效。',
-  CSRF_INVALID: '本地会话已更新，请重试。',
-  AUTH_REQUIRED: '请先登录。',
-  INVALID_CREDENTIALS: '邮箱或密码不正确，或账号不可用。',
-  RATE_LIMITED: '操作过于频繁，请稍后再试。',
-  DRAFT_REVISION_CONFLICT: '草稿已在其他地方更新。你的本地编辑已保留。',
-  INVALID_CURSOR: '列表已变化，请从第一页重新加载。',
-}
-
 export class ApiError extends Error {
   constructor(public readonly code: string | undefined, public readonly status: number,
     public readonly details: Record<string, unknown> = {}) {
-    super((code && errors[code]) || `请求失败（HTTP ${status}）。`)
+    super(apiErrorMessage(code, status))
   }
 }
 
@@ -75,7 +57,7 @@ export async function getJson<T>(path: string, options?: RequestInit): Promise<T
   try {
     response = await fetch(path, options)
   } catch {
-    throw new Error('连接后端失败，请检查本地服务。')
+    throw new Error(networkErrorMessage())
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null)

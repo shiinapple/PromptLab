@@ -15,12 +15,14 @@ export function useDirectRun(run: Ref<Run | undefined>, error: Ref<string>, stor
   const request = shallowRef<ReturnType<typeof makeRequest>>()
   // 已经拿到、但平台还没保存成功的结果。重试只重新保存，不会再次请求模型。
   const pending = shallowRef<{ id: string; result: RunResult }>()
+  const lastFailure = shallowRef<ModelError>()
   let controller: AbortController | undefined
 
   function reset() {
     text.value = ''
     request.value = undefined
     pending.value = undefined
+    lastFailure.value = undefined
   }
 
   async function start(frozen: Run, profile: ConnectionProfile) {
@@ -50,6 +52,7 @@ export function useDirectRun(run: Ref<Run | undefined>, error: Ref<string>, stor
     } catch (err) {
       const failure = abort.signal.aborted ? new ModelError('CANCELED')
         : err instanceof ModelError ? err : new ModelError('PROTOCOL_ERROR')
+      lastFailure.value = failure
       error.value = modelMessage(failure)
       result = failure.code === 'CANCELED' ? { status: 'CANCELED' }
         : { status: 'FAILED', failureCode: failure.failureCode }
@@ -89,5 +92,5 @@ export function useDirectRun(run: Ref<Run | undefined>, error: Ref<string>, stor
     stop()
   })
 
-  return { text, stage, seconds, request, pending, reset, start, save, stop }
+  return { text, stage, seconds, request, pending, lastFailure, reset, start, save, stop }
 }

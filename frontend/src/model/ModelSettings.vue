@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { ConnectionStore, normalizeBase, validKey, validModel } from './connection'
 import { DirectTransport, ModelError } from './direct'
 import { modelMessage, t } from './copy'
@@ -137,11 +137,12 @@ async function query(list: boolean) {
   }
 }
 
+onMounted(() => document.getElementById('model-name')?.focus())
 onBeforeUnmount(() => controller?.abort())
 </script>
 
 <template>
-  <section class="panel connection" aria-labelledby="connection-title">
+  <section class="panel connection" aria-labelledby="connection-title" @keydown.esc="emit('close')">
     <div class="section-heading">
       <h2 id="connection-title">{{ t('模型连接', 'Model connection') }}</h2>
       <button type="button" @click="emit('close')">{{ t('返回练习', 'Back to practice') }}</button>

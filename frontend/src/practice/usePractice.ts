@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ApiError, authListeners, createRun, readProblem, readProblems, readRun, type Grading, type Problem, type ProblemSummary, type Run, type RunMode } from './api'
-import { detectAccountMode, logout as endSession, me, readDraft, writeDraft, type Profile } from './account'
+import { detectAccountMode, logout as endSession, me, readDraft, readSettings, saveLocale, writeDraft, type Profile } from './account'
 import { makeRequest } from './d0'
 import { assembleMessages } from './messages'
 import { editableSlot } from './slot'
@@ -10,7 +10,7 @@ import { useDirectRun } from './useDirectRun'
 import { useManualRun } from './useManualRun'
 import { useConnection } from '../model/useConnection'
 import { validModel } from '../model/connection'
-import { english, t } from '../model/copy'
+import { getLocale, setLocale, t, urlPinsLocale, type Locale } from '../i18n/locale'
 
 /** 草稿在服务端的冲突信息：保留本地文本，等待用户选择采用哪一方。 */
 export type DraftConflict = { problemId: string; version: number; caseId: string; text: string; serverRevision: number }
@@ -24,7 +24,6 @@ export function usePractice() {
   const runGrading = ref<Grading>()
   // local-practice 模式的草稿只保存在内存中；账号模式使用服务端草稿。
   const drafts = new Map<string, string>()
-  const locale = english ? 'en' : 'zh-CN'
   const run = ref<Run>()
   const prompt = ref('')
   const loading = ref(false)
@@ -190,7 +189,7 @@ export function usePractice() {
     if (!problem.value || !historical.value) return
     const text = prompt.value
     await feedback.action(async () => {
-      const current = await readProblem(problem.value!.problemId, locale)
+      const current = await readProblem(problem.value!.problemId, getLocale())
       await displayProblem(current)
       prompt.value = text
       await flushDraft()
@@ -213,11 +212,11 @@ export function usePractice() {
     try {
       const url = new URL(location.href)
       const runId = url.searchParams.get('run')
-      const [list, restored] = await Promise.all([readProblems(locale), runId ? readRun(runId) : undefined])
+      const [list, restored] = await Promise.all([readProblems(getLocale()), runId ? readRun(runId) : undefined])
       problems.value = list.items
       const id = restored?.problemId ?? url.searchParams.get('problem') ?? problems.value[0]?.problemId
       if (!id) throw new Error(t('没有可用题目。', 'No problems available.'))
-      const data = await readProblem(id, locale, restored?.version)
+      const data = await readProblem(id, getLocale(), restored?.version)
       await displayProblem(data, restored?.caseId)
       if (restored) {
         run.value = restored
@@ -238,7 +237,7 @@ export function usePractice() {
     feedback.clear()
     try {
       const restored = await readRun(runId)
-      const data = await readProblem(restored.problemId, locale, restored.version)
+      const data = await readProblem(restored.problemId, getLocale(), restored.version)
       await displayProblem(data, restored.caseId)
       run.value = restored
       runGrading.value = data.cases.find(item => item.caseId === restored.caseId)?.grading
@@ -259,7 +258,7 @@ export function usePractice() {
     loading.value = true
     feedback.clear()
     try {
-      await displayProblem(await readProblem(id, locale))
+      await displayProblem(await readProblem(id, getLocale()))
       const url = new URL(location.href)
       url.searchParams.set('problem', id)
       url.searchParams.delete('run')
@@ -341,10 +340,46 @@ export function usePractice() {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  /** 账号模式下以服务端保存的语言为准；URL 参数只影响本次加载，不被覆盖。 */
+  async function syncServerLocale() {
+    if (urlPinsLocale(location.search)) return
+    const settings = await readSettings().catch(() => undefined)
+    if (settings) setLocale(settings.locale)
+  }
+
+  /** 切换语言：界面立即更新；已登录时保存偏好，保存失败只提示、不回滚。 */
+  async function changeLocale(next: Locale) {
+    if (next === getLocale()) return
+    setLocale(next)
+    if (accountMode.value && profile.value) {
+      try {
+        await saveLocale(next)
+      } catch {
+        feedback.error.value = t('语言已切换，但偏好保存失败，请稍后重试。', 'Language switched, but saving the preference failed. Try again later.')
+      }
+    }
+    await refreshDisplay(next)
+  }
+
+  /** 只替换题目与题库列表的展示文本，不触碰草稿、选中用例与运行快照。 */
+  async function refreshDisplay(next: Locale) {
+    const current = problem.value
+    if (!current) return
+    try {
+      const [list, data] = await Promise.all([readProblems(next), readProblem(current.problemId, next, current.version)])
+      if (getLocale() !== next || problem.value?.problemId !== current.problemId || problem.value.version !== current.version) return
+      problems.value = list.items
+      problem.value = { ...problem.value, title: data.title, description: data.description }
+    } catch (err) {
+      feedback.error.value = (err as Error).message
+    }
+  }
+
   /** 账号模式的登录成功后调用：读取身份并重新加载题目与草稿。 */
   async function signedIn() {
     authRequired.value = false
     profile.value = await me().catch(() => undefined)
+    await syncServerLocale()
     await load()
   }
 
@@ -370,7 +405,6 @@ export function usePractice() {
   }
 
   onMounted(async () => {
-    document.documentElement.lang = english ? 'en' : 'zh-CN'
     authListeners.add(onAuthRequired)
     accountMode.value = await detectAccountMode().catch(() => false)
     if (!accountMode.value) {
@@ -378,8 +412,12 @@ export function usePractice() {
       return
     }
     profile.value = await me().catch(() => undefined)
-    if (profile.value) void load()
-    else authRequired.value = true
+    if (profile.value) {
+      await syncServerLocale()
+      void load()
+    } else {
+      authRequired.value = true
+    }
   })
 
   onUnmounted(() => {
@@ -392,6 +430,6 @@ export function usePractice() {
     problems, problem, historical, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
     accountMode, profile, authRequired, conflict, draftSaving, historyRevision,
     load, selectProblem, selectCase, setMode, freeze, copyText, download,
-    openRun, signedIn, signOut, useServerDraft, overwriteDraft, copyDraftToCurrent,
+    openRun, signedIn, signOut, useServerDraft, overwriteDraft, copyDraftToCurrent, changeLocale,
   }
 }
