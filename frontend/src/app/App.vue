@@ -2,6 +2,9 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { usePractice } from '../practice/usePractice'
 import { runTitle, statusSymbol } from '../practice/labels'
+import SettingsPanel from '../practice/SettingsPanel.vue'
+import type { EditorPrefs, Settings } from '../practice/settings'
+import { readSettings } from '../practice/settingsApi'
 import ProblemPanel from '../practice/ProblemPanel.vue'
 import PromptPanel from '../practice/PromptPanel.vue'
 import DirectRunSection from '../practice/DirectRunSection.vue'
@@ -48,6 +51,21 @@ async function closeSettings() {
   await nextTick()
   document.getElementById('settings-toggle')?.focus()
 }
+
+const prefsOpen = ref(false)
+const editorPrefs = ref<EditorPrefs>({})
+// 账号登录后读取一次编辑器偏好；失败时保持默认值，不影响练习。
+watch(profile, async current => {
+  if (!current) return
+  try {
+    editorPrefs.value = (await readSettings()).editorPrefs
+  } catch {
+    editorPrefs.value = {}
+  }
+}, { immediate: true })
+function onPrefsSaved(saved: Settings) {
+  editorPrefs.value = saved.editorPrefs
+}
 </script>
 
 <template>
@@ -64,6 +82,9 @@ async function closeSettings() {
         {{ otherLocale === 'en' ? 'English' : '中文' }}
       </button>
       <template v-if="accountMode && profile">
+        <button type="button" :disabled="busy" :aria-expanded="prefsOpen" aria-controls="settings-panel" @click="prefsOpen = !prefsOpen">
+          {{ t('偏好设置', 'Preferences') }}
+        </button>
         <span class="meta">{{ profile.email }}</span>
         <button type="button" :disabled="busy" @click="signOut">{{ t('退出', 'Sign out') }}</button>
       </template>
@@ -88,6 +109,8 @@ async function closeSettings() {
       <ModelSettings v-if="settingsOpen" :store="store" :transport="transport"
         @saved="syncConnection" @close="closeSettings" />
     </div>
+    <SettingsPanel v-if="accountMode && prefsOpen && profile" id="settings-panel"
+      @saved="onPrefsSaved" @close="prefsOpen = false" />
     <nav v-if="problems.length" class="run-options" :aria-label="t('题目列表', 'Problems')">
       <button v-for="item in problems" :key="item.problemId" type="button" :disabled="loading"
         :aria-pressed="problem?.problemId === item.problemId" @click="selectProblem(item.problemId)">
@@ -99,7 +122,7 @@ async function closeSettings() {
         @current="selectProblem(problem.problemId)" @select-case="selectCase" />
 
       <div class="activity">
-        <PromptPanel v-model="prompt" :role="slot?.role" :preview="preview" :mode="mode" :connection="connection" :busy="busy || loading"
+        <PromptPanel v-model="prompt" :editor-prefs="editorPrefs" :role="slot?.role" :preview="preview" :mode="mode" :connection="connection" :busy="busy || loading"
           :settings-open="settingsOpen" :historical="historical" :has-run="!!run" @update:mode="setMode"
           @restore="restoreTemplate" @configure="settingsOpen = true" @run="freeze" />
         <p v-if="accountMode && historical" class="help">

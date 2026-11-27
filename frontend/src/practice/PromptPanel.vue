@@ -2,10 +2,14 @@
 import type { RunMode } from './api'
 import type { Message } from './messages'
 import type { ConnectionProfile } from '../model/connection'
+import { computed } from 'vue'
 import { validModel } from '../model/connection'
 import { t } from '../model/copy'
+import type { EditorPrefs } from './settings'
+import { effectivePrefs } from './settings'
 
-defineProps<{
+const props = defineProps<{
+  editorPrefs?: EditorPrefs
   preview: { messages?: Message[]; error?: string }
   /** 编辑槽所在消息的角色。 */
   role: string | undefined
@@ -18,13 +22,17 @@ defineProps<{
 }>()
 defineEmits<{ restore: []; run: []; configure: []; 'update:mode': [value: RunMode] }>()
 const prompt = defineModel<string>({ required: true })
+const promptStyle = computed(() => {
+  const prefs = effectivePrefs(props.editorPrefs ?? {})
+  return { fontSize: `${prefs.fontSize}px`, tabSize: prefs.tabSize, whiteSpace: prefs.wordWrap ? 'pre-wrap' : 'pre' }
+})
 </script>
 
 <template>
   <section class="panel">
     <h2><label for="prompt">{{ role === 'system' ? 'System Prompt' : 'Prompt' }}</label></h2>
     <p class="help" id="prompt-hint">{{ t('编辑后可随时恢复模板；未保存的内容切换语言时保留。', 'You can restore the template at any time. Unsaved text stays when you switch language.') }}</p>
-    <textarea id="prompt" v-model="prompt" rows="6" spellcheck="false"
+    <textarea id="prompt" v-model="prompt" rows="6" spellcheck="false" :style="promptStyle"
       :aria-describedby="preview.error ? 'prompt-hint prompt-error' : 'prompt-hint'" :aria-invalid="Boolean(preview.error)" />
     <p v-if="preview.error" id="prompt-error" class="field-error" role="alert">{{ preview.error }}</p>
     <details>
