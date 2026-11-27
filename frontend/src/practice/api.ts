@@ -53,15 +53,24 @@ const errors: Record<string, string> = {
   TEMPORARILY_UNAVAILABLE: '服务暂时繁忙，请重试。',
   INVALID_RESULT: '提交的正文无效。',
   CSRF_INVALID: '本地会话已更新，请重试。',
+  AUTH_REQUIRED: '请先登录。',
+  INVALID_CREDENTIALS: '邮箱或密码不正确，或账号不可用。',
+  RATE_LIMITED: '操作过于频繁，请稍后再试。',
+  DRAFT_REVISION_CONFLICT: '草稿已在其他地方更新。你的本地编辑已保留。',
+  INVALID_CURSOR: '列表已变化，请从第一页重新加载。',
 }
 
 export class ApiError extends Error {
-  constructor(public readonly code: string | undefined, status: number) {
+  constructor(public readonly code: string | undefined, public readonly status: number,
+    public readonly details: Record<string, unknown> = {}) {
     super((code && errors[code]) || `请求失败（HTTP ${status}）。`)
   }
 }
 
-async function getJson<T>(path: string, options?: RequestInit): Promise<T> {
+/** 账号模式下业务接口返回 AUTH_REQUIRED 时，页面切回登录界面。 */
+export const authListeners = new Set<() => void>()
+
+export async function getJson<T>(path: string, options?: RequestInit): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, options)
@@ -70,16 +79,47 @@ async function getJson<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new ApiError(body?.code, response.status)
+    const error = new ApiError(body?.code, response.status, body?.details ?? {})
+    if (error.code === 'AUTH_REQUIRED') authListeners.forEach(listener => listener())
+    throw error
   }
+  if (response.status === 204) return undefined as T
   return response.json()
 }
 
-async function post<T>(path: string, body: unknown, key?: string) {
-  const { token } = await getJson<{ token: string }>('/api/practice/session')
-  const headers = new Headers({ 'Content-Type': 'application/json', 'X-Practice-CSRF': token })
+type Csrf = { token: string; headerName: string }
+let csrf: Promise<Csrf> | undefined
+// local-practice 的写接口校验自己的 token（/api/practice/session），账号模式使用会话 token。
+let csrfPath = '/api/auth/csrf'
+export function useLocalCsrf() {
+  csrfPath = '/api/practice/session'
+  csrf = undefined
+}
+
+/** 每次写请求前取同一会话的 CSRF；登录或退出后调用 refreshCsrf 失效旧 token。 */
+export function refreshCsrf() {
+  csrf = undefined
+}
+function csrfToken() {
+  csrf ??= getJson<Csrf>(csrfPath).catch(err => {
+    csrf = undefined
+    throw err
+  })
+  return csrf
+}
+
+export async function post<T>(path: string, body: unknown, key?: string) {
+  const { token, headerName } = await csrfToken()
+  const headers = new Headers({ 'Content-Type': 'application/json', [headerName]: token })
   if (key) headers.set('Idempotency-Key', key)
   return getJson<T>(path, { method: 'POST', headers, body: JSON.stringify(body) })
+}
+
+export async function send<T>(method: 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown) {
+  const { token, headerName } = await csrfToken()
+  const headers = new Headers({ [headerName]: token })
+  if (body !== undefined) headers.set('Content-Type', 'application/json')
+  return getJson<T>(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
 }
 
 type Locale = 'zh-CN' | 'en'

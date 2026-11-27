@@ -7,6 +7,8 @@ import PromptPanel from '../practice/PromptPanel.vue'
 import DirectRunSection from '../practice/DirectRunSection.vue'
 import ManualRunSection from '../practice/ManualRunSection.vue'
 import CheckList from '../practice/CheckList.vue'
+import HistoryPanel from '../practice/HistoryPanel.vue'
+import LoginForm from '../account/LoginForm.vue'
 import ModelSettings from '../model/ModelSettings.vue'
 import { t } from '../model/copy'
 
@@ -17,6 +19,7 @@ const {
   manual: { raw, confirmed, edit, importFile, grade },
   problems, problem, historical, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
   load, selectProblem, selectCase, setMode, freeze, copyText, download,
+  accountMode, profile, authRequired, conflict, draftSaving, historyRevision, openRun, signedIn, signOut, useServerDraft, overwriteDraft, copyDraftToCurrent,
 } = usePractice()
 
 const title = computed(() => run.value ? runTitle(run.value, stage.value, !!pending.value, runGrading.value) : '')
@@ -32,10 +35,20 @@ const failed = computed(() => run.value?.status === 'FAILED'
         {{ t('模型设置', 'Model settings') }}
       </button>
     </div>
+    <div v-if="accountMode && profile">
+      <span class="meta">{{ profile.email }}</span>
+      <button type="button" :disabled="busy" @click="signOut">{{ t('退出', 'Sign out') }}</button>
+    </div>
   </header>
   <main>
     <h1>{{ problem?.title ?? 'Prompt 练习' }}</h1>
+    <LoginForm v-if="accountMode && authRequired" @signed-in="signedIn" />
     <p v-if="loading" role="status">{{ t('正在加载题目…', 'Loading problem…') }}</p>
+    <div v-if="conflict" class="feedback error" role="alert">
+      {{ t('草稿在其他地方已更新（服务器 revision', 'The draft changed elsewhere (server revision') }} {{ conflict.serverRevision }}）。
+      <button type="button" :disabled="busy" @click="useServerDraft">{{ t('使用服务器版本', 'Use server draft') }}</button>
+      <button type="button" :disabled="busy" @click="overwriteDraft">{{ t('用本地编辑覆盖', 'Overwrite with my edits') }}</button>
+    </div>
     <div v-if="error" class="feedback error" role="alert">{{ error }}</div>
     <p v-if="notice" class="feedback" role="status">{{ notice }}</p>
     <button v-if="!problem && !loading" type="button" @click="load">{{ t('重新加载', 'Reload') }}</button>
@@ -47,7 +60,7 @@ const failed = computed(() => run.value?.status === 'FAILED'
         {{ item.problemId }} · {{ item.title }}
       </button>
     </nav>
-    <div v-if="problem && publicCase" class="workspace">
+    <div v-if="problem && publicCase && !(accountMode && authRequired)" class="workspace">
       <ProblemPanel :problem="problem" :public-case="publicCase" :historical="historical" :loading="loading"
         @current="selectProblem(problem.problemId)" @select-case="selectCase" />
 
@@ -55,6 +68,11 @@ const failed = computed(() => run.value?.status === 'FAILED'
         <PromptPanel v-model="prompt" :role="slot?.role" :preview="preview" :mode="mode" :connection="connection" :busy="busy || loading"
           :settings-open="settingsOpen" :historical="historical" :has-run="!!run" @update:mode="setMode"
           @restore="restoreTemplate" @configure="settingsOpen = true" @run="freeze" />
+        <p v-if="accountMode && historical" class="help">
+          <button type="button" :disabled="busy || loading" @click="copyDraftToCurrent">{{ t('复制到当前版本', 'Copy to current version') }}</button>
+        </p>
+        <HistoryPanel v-if="accountMode" :problem-id="problem.problemId" :revision="historyRevision" :busy="busy || loading"
+          @open="openRun" />
 
         <section v-if="run" class="panel" aria-labelledby="run-heading">
           <div class="section-heading">
