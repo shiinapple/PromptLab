@@ -477,6 +477,32 @@ class M4IntegrationTest {
         assertEquals("long-lived", get(draft, session).body.at("/draft/slots/user").asText());
     }
 
+    @Test
+    void keepsBrowserHistoryAndArchiveProjectionsCompatible() throws Exception {
+        var session = login(createUser());
+        String runId = newRun(session);
+        assertEquals(200, complete(session, runId).status);
+        var archive = write("POST", "/api/submissions", session, Map.of("runId", runId));
+        assertEquals(201, archive.status);
+        var history = get("/api/problems/002/runs", session);
+        var submissions = get("/api/submissions", session);
+        assertEquals(200, history.status);
+        assertEquals(200, submissions.status);
+        var run = history.body.at("/items/0");
+        var listed = submissions.body.at("/items/0");
+        assertEquals(run, listed);
+        for (String field : java.util.List.of("runId", "submissionId", "submittedAt")) {
+            assertFalse(archive.body.path(field).asText().isBlank());
+            assertEquals(archive.body.get(field), listed.get(field));
+        }
+        for (String field : java.util.List.of("createdAt", "expiresAt", "finishedAt")) {
+            assertNotNull(Instant.parse(listed.path(field).asText()));
+        }
+        assertEquals("COMPLETED", listed.path("status").asText());
+        assertFalse(listed.has("rawOutput"));
+        assertFalse(run.has("messages"));
+    }
+
     private void ageTerminal(String run, Duration age) {
         long finished = System.currentTimeMillis() - age.toMillis();
         jdbc.sql("UPDATE runs SET created_at = ?, finished_at = ? WHERE id = ?")
