@@ -25,6 +25,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import cn.shiinapple.promptpractice.common.SqliteWrites;
 import cn.shiinapple.promptpractice.judge.JudgeService;
+import cn.shiinapple.promptpractice.maintenance.RunRetention;
 import cn.shiinapple.promptpractice.problem.ProblemCatalog;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -32,7 +33,6 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class PracticeRuns implements ApplicationRunner {
     static final JsonMapper JSON = JsonMapper.builder().build();
-    private static final long TTL = Duration.ofHours(24).toMillis();
     private static final String SELECT = """
             SELECT r.*, s.problem_id, s.version, s.case_id, s.messages_json, s.request_params_json, v.content_hash
             FROM runs r JOIN prompt_snapshots s ON s.id = r.snapshot_id
@@ -46,15 +46,21 @@ public class PracticeRuns implements ApplicationRunner {
     private final JudgeService judge;
     private final String localOwner;
     private final Clock clock;
+    private final RunRetention retention;
 
     @Autowired
     PracticeRuns(JdbcClient jdbc, PlatformTransactionManager transactions, ProblemCatalog catalog, JudgeService judge,
-            Environment environment) {
-        this(jdbc, transactions, catalog, judge, localSubject(environment), Clock.systemUTC());
+            Environment environment, RunRetention retention) {
+        this(jdbc, transactions, catalog, judge, localSubject(environment), Clock.systemUTC(), retention);
     }
 
     PracticeRuns(JdbcClient jdbc, PlatformTransactionManager transactions, ProblemCatalog catalog, JudgeService judge,
             String owner, Clock clock) {
+        this(jdbc, transactions, catalog, judge, owner, clock, new RunRetention(Duration.ofHours(24), Duration.ofMinutes(10)));
+    }
+
+    private PracticeRuns(JdbcClient jdbc, PlatformTransactionManager transactions, ProblemCatalog catalog,
+            JudgeService judge, String owner, Clock clock, RunRetention retention) {
         if (owner != null && !owner.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("Invalid local subject");
         this.jdbc = jdbc;
         this.write = new SqliteWrites(transactions, jdbc);
@@ -62,6 +68,7 @@ public class PracticeRuns implements ApplicationRunner {
         this.judge = judge;
         this.localOwner = owner;
         this.clock = clock;
+        this.retention = retention;
     }
 
     private static String localSubject(Environment environment) {
@@ -161,7 +168,7 @@ public class PracticeRuns implements ApplicationRunner {
                     VALUES (:id, :owner, :snapshot, :mode, :key, :digest, 'PENDING', :now, :expires)
                     """).param("id", runId).param("owner", owner).param("snapshot", snapshotId)
                     .param("mode", intent.mode()).param("key", key).param("digest", digest)
-                    .param("now", now).param("expires", now + TTL).update();
+                    .param("now", now).param("expires", Math.addExact(now, retention.milliseconds(intent.mode()))).update();
             return new Created(true, byId(owner, runId).view(now));
         });
     }

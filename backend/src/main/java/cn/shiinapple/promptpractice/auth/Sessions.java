@@ -2,11 +2,16 @@ package cn.shiinapple.promptpractice.auth;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import cn.shiinapple.promptpractice.practice.PracticeError;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpSessionBindingEvent;
+import jakarta.servlet.http.HttpSessionBindingListener;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,6 +21,7 @@ public class Sessions {
     private static final String SUBJECT = Sessions.class.getName() + ".subject";
     private static final String PROFILE = Sessions.class.getName() + ".profile";
     private final Accounts accounts;
+    private final ConcurrentHashMap<String, Set<HttpSession>> authenticated = new ConcurrentHashMap<>();
 
     Sessions(Accounts accounts) {
         this.accounts = accounts;
@@ -46,8 +52,10 @@ public class Sessions {
         if (session == null) throw new PracticeError(403, "CSRF_INVALID");
         synchronized (session) {
             verifyCsrf(request);
+            if (accounts.active(id).isEmpty()) throw new PracticeError(401, "INVALID_CREDENTIALS");
             request.changeSessionId();
-            session.setAttribute(SUBJECT, id);
+            session.removeAttribute(SUBJECT);
+            session.setAttribute(SUBJECT, new Binding(id));
             session.setAttribute(CSRF, UUID.randomUUID().toString());
         }
     }
@@ -55,15 +63,55 @@ public class Sessions {
     void requireActive(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         Object subject = attribute(session, SUBJECT);
-        if (subject instanceof String id) {
-            var account = accounts.active(id);
+        if (subject instanceof Binding binding) {
+            var account = accounts.active(binding.id);
             if (account.isPresent()) {
                 request.setAttribute(PROFILE, account.get());
                 return;
             }
+            revoke(binding.id);
             invalidate(session);
         }
         throw new PracticeError(401, "AUTH_REQUIRED");
+    }
+
+    public void revokeInactive() {
+        var subjects = List.copyOf(authenticated.keySet());
+        if (subjects.isEmpty()) return;
+        var active = accounts.activeIds();
+        for (String id : subjects) {
+            if (!active.contains(id)) revoke(id);
+        }
+    }
+
+    private void revoke(String id) {
+        var sessions = authenticated.remove(id);
+        if (sessions != null) sessions.forEach(Sessions::invalidate);
+    }
+
+    private final class Binding implements HttpSessionBindingListener {
+        private final String id;
+
+        Binding(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public void valueBound(HttpSessionBindingEvent event) {
+            authenticated.compute(id, (key, sessions) -> {
+                if (sessions == null) sessions = ConcurrentHashMap.newKeySet();
+                sessions.add(event.getSession());
+                return sessions;
+            });
+        }
+
+        @Override
+        public void valueUnbound(HttpSessionBindingEvent event) {
+            authenticated.computeIfPresent(id, (key, sessions) -> {
+                sessions.remove(event.getSession());
+                return sessions.isEmpty() ? null : sessions;
+            });
+        }
     }
 
     public static String owner(HttpServletRequest request) {

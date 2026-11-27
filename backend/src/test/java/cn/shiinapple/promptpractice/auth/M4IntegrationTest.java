@@ -4,21 +4,31 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
+import cn.shiinapple.promptpractice.PromptPracticeApplication;
 import cn.shiinapple.promptpractice.judge.JudgeService;
+import cn.shiinapple.promptpractice.maintenance.RunMaintenance;
+import cn.shiinapple.promptpractice.ops.Operations;
 import cn.shiinapple.promptpractice.practice.PracticeError;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -45,6 +55,9 @@ class M4IntegrationTest {
 
     @LocalServerPort int port;
     @Autowired Accounts accounts;
+    @Autowired RunMaintenance maintenance;
+    @Autowired Operations operations;
+    @Autowired Sessions sessions;
     @Autowired JdbcClient jdbc;
     @Autowired DataSource database;
     @MockitoSpyBean JudgeService judge;
@@ -250,8 +263,159 @@ class M4IntegrationTest {
         assertEquals(409, write("PUT", "/api/problems/002/draft", session, draftBody(2, 0, "conflict after busy")).status);
     }
 
+    @Test
+    void expiresPendingAtItsDeadlineAndRejectsLateResults() throws Exception {
+        var session = login(createUser());
+        String run = newRun(session, "DIRECT");
+        var before = get("/api/runs/" + run, session).body;
+        assertEquals(Duration.ofMinutes(10), Duration.between(Instant.parse(before.path("createdAt").asText()),
+                Instant.parse(before.path("expiresAt").asText())));
+        long now = System.currentTimeMillis();
+        jdbc.sql("UPDATE runs SET created_at = ?, expires_at = ? WHERE id = ?")
+                .params(now - 2000, now - 1000, run).update();
+        assertEquals(1, maintenance.sweep().expired());
+        var expired = get("/api/runs/" + run, session).body;
+        assertEquals("EXPIRED", expired.path("status").asText());
+        assertEquals(Instant.ofEpochMilli(now - 1000).toString(), expired.path("finishedAt").asText());
+        assertEquals("EXPIRED", jdbc.sql("SELECT status FROM runs WHERE id = ?").param(run).query(String.class).single());
+        assertEquals(410, complete(session, run).status);
+    }
+
+    @Test
+    void removesOldUnarchivedSnapshotsAndReconsidersUnarchivedRunsOnNextSweep() throws Exception {
+        var session = login(createUser());
+        String archived = newRun(session);
+        String expired = newRun(session, "DIRECT");
+        assertEquals(200, complete(session, archived).status);
+        String archiveId = write("POST", "/api/submissions", session, Map.of("runId", archived))
+                .body.path("submissionId").asText();
+        age(archived, Duration.ofHours(25));
+        long now = System.currentTimeMillis();
+        jdbc.sql("UPDATE runs SET created_at = ?, expires_at = ? WHERE id = ?")
+                .params(now - Duration.ofMinutes(11).toMillis(), now - 1000, expired).update();
+        var sweep = maintenance.sweep();
+        assertEquals(1, sweep.expired());
+        assertEquals(1, sweep.deletedSnapshots());
+        assertEquals(200, get("/api/runs/" + archived, session).status);
+        assertEquals(404, get("/api/runs/" + expired, session).status);
+        assertEquals(204, write("DELETE", "/api/submissions/" + archiveId, session, null).status);
+        assertEquals(200, get("/api/runs/" + archived, session).status);
+        assertEquals(1, maintenance.sweep().deletedSnapshots());
+        assertEquals(404, get("/api/runs/" + archived, session).status);
+    }
+
+    @Test
+    void cleanupAndArchiveRaceLeavesEitherBothRecordsOrNeither() throws Exception {
+        var session = login(createUser());
+        for (int attempt = 0; attempt < 4; attempt++) {
+            String run = newRun(session);
+            assertEquals(200, complete(session, run).status);
+            String snapshot = jdbc.sql("SELECT snapshot_id FROM runs WHERE id = ?").param(run).query(String.class).single();
+            age(run, Duration.ofHours(25));
+            var start = new CountDownLatch(1);
+            try (var workers = Executors.newFixedThreadPool(2)) {
+                var archive = workers.submit(() -> {
+                    start.await();
+                    return write("POST", "/api/submissions", session, Map.of("runId", run));
+                });
+                var cleanup = workers.submit(() -> {
+                    start.await();
+                    return maintenance.sweep();
+                });
+                start.countDown();
+                int status = archive.get(6, TimeUnit.SECONDS).status;
+                cleanup.get(6, TimeUnit.SECONDS);
+                assertTrue(status == 201 || status == 404);
+                int count = status == 201 ? 1 : 0;
+                assertEquals(count, jdbc.sql("SELECT count(*) FROM runs WHERE id = ?").param(run).query(Integer.class).single());
+                assertEquals(count, jdbc.sql("SELECT count(*) FROM submissions WHERE run_id = ?").param(run).query(Integer.class).single());
+                assertEquals(count, jdbc.sql("SELECT count(*) FROM prompt_snapshots WHERE id = ?")
+                        .param(snapshot).query(Integer.class).single());
+            }
+        }
+    }
+
+    @Test
+    void disablingRevokesEverySessionAndDeletingCascadesOnlyThatAccountsData() throws Exception {
+        var user = createUser();
+        var a = login(user);
+        var b = login(user);
+        var third = login(user);
+        var other = login(createUser());
+        assertEquals(201, write("PUT", "/api/problems/002/draft", a, draftBody(2, 0, "private")).status);
+        assertEquals(200, write("PATCH", "/api/settings", a, Map.of("locale", "en")).status);
+        String run = newRun(a);
+        assertEquals(200, complete(a, run).status);
+        assertEquals(201, write("POST", "/api/submissions", a, Map.of("runId", run)).status);
+        assertEquals(1, operations.execute(new String[]{"delete-user", user.email}));
+        assertEquals(0, operations.execute(new String[]{"disable-user", user.email}));
+        assertEquals(401, get("/api/settings", a).status);
+        assertTrue(!b.token.equals(csrf(b.cookie).token), "Every existing session must be invalidated");
+        sessions.revokeInactive();
+        assertEquals(401, get("/api/me", third).status);
+        assertEquals(200, get("/api/me", other).status);
+        assertEquals(0, operations.execute(new String[]{"delete-user", user.email}));
+        for (String table : java.util.List.of("drafts", "user_settings", "prompt_snapshots", "runs", "submissions")) {
+            assertEquals(0, jdbc.sql("SELECT count(*) FROM " + table + " WHERE user_id = ?")
+                    .param(user.id).query(Integer.class).single());
+        }
+        assertEquals(0, jdbc.sql("SELECT count(*) FROM users WHERE id = ?").param(user.id).query(Integer.class).single());
+        assertEquals(200, get("/api/me", other).status);
+    }
+
+    @Test
+    void backsUpAndRestoresAnIndependentDatabaseWithUsableBusinessRows() throws Exception {
+        var user = createUser();
+        var session = login(user);
+        assertEquals(201, write("PUT", "/api/problems/002/draft", session, draftBody(1, 0, "saved content")).status);
+        assertEquals(200, write("PATCH", "/api/settings", session, Map.of("locale", "en")).status);
+        String run = newRun(session);
+        assertEquals(200, complete(session, run).status);
+        assertEquals(201, write("POST", "/api/submissions", session, Map.of("runId", run)).status);
+        Path backups = directory.resolve("backups");
+        Files.createDirectory(backups, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+        Path expired = Files.createFile(backups.resolve("prompt-practice-1-" + UUID.randomUUID() + ".sqlite3"));
+        Files.setLastModifiedTime(expired, FileTime.from(Instant.now().minus(Duration.ofDays(31))));
+        Path unrelated = Files.createFile(backups.resolve("preserve.sqlite3"));
+        Files.setLastModifiedTime(unrelated, Files.getLastModifiedTime(expired));
+        assertEquals(0, operations.execute(new String[]{"backup", backups.toString()}));
+        assertFalse(Files.exists(expired));
+        assertTrue(Files.exists(unrelated));
+        Path backup;
+        try (var files = Files.list(backups)) {
+            backup = files.filter(file -> file.getFileName().toString().startsWith("prompt-practice-")).findFirst().orElseThrow();
+        }
+        assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(backup)));
+        Path restore = directory.resolve("isolated restore");
+        assertEquals(0, Operations.restore(new String[]{"restore", backup.toString(), restore.toString()}));
+        assertEquals(1, Operations.restore(new String[]{"restore", backup.toString(), restore.toString()}));
+        try (var context = new SpringApplicationBuilder(PromptPracticeApplication.class).web(WebApplicationType.NONE)
+                .run("--prompt-practice.database.path=" + restore.resolve("prompt-practice.sqlite3"))) {
+            var restored = context.getBean(JdbcClient.class);
+            assertEquals("en", restored.sql("SELECT locale FROM user_settings WHERE user_id = ?")
+                    .param(user.id).query(String.class).single());
+            assertEquals("saved content", restored.sql("SELECT json_extract(slots_json, '$.user') FROM drafts WHERE user_id = ?")
+                    .param(user.id).query(String.class).single());
+            assertEquals("{}", restored.sql("""
+                    SELECT r.raw_output FROM runs r JOIN submissions a ON r.id = a.run_id AND r.user_id = a.user_id
+                    WHERE r.id = ? AND r.user_id = ?
+                    """).params(run, user.id).query(String.class).single());
+        }
+    }
+
+    private void age(String run, Duration age) {
+        long timestamp = System.currentTimeMillis() - age.toMillis();
+        jdbc.sql("UPDATE runs SET created_at = ? WHERE id = ?").params(timestamp, run).update();
+        jdbc.sql("UPDATE prompt_snapshots SET created_at = ? WHERE id = (SELECT snapshot_id FROM runs WHERE id = ?)")
+                .params(timestamp, run).update();
+    }
+
     private String newRun(Session session) throws Exception {
-        var body = Map.of("problemId", "002", "version", 2, "caseId", "case-1", "mode", "D0",
+        return newRun(session, "D0");
+    }
+
+    private String newRun(Session session, String mode) throws Exception {
+        var body = Map.of("problemId", "002", "version", 2, "caseId", "case-1", "mode", mode,
                 "slots", Map.of("user", "{{requirement}}"));
         var reply = send("POST", "/api/runs", session.cookie, session.token, body,
                 Map.of("Idempotency-Key", UUID.randomUUID().toString()));

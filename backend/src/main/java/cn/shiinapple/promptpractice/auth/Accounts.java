@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -55,6 +56,22 @@ public class Accounts {
     Optional<Profile> active(String id) {
         return jdbc.sql("SELECT id, email_normalized FROM users WHERE id = ? AND state = 'ACTIVE'")
                 .param(id).query((rs, row) -> new Profile(rs.getString(1), rs.getString(2))).optional();
+    }
+
+    Set<String> activeIds() {
+        return jdbc.sql("SELECT id FROM users WHERE state = 'ACTIVE'").query(String.class).set();
+    }
+
+    public void disable(String email) {
+        int updated = jdbc.sql("UPDATE users SET state = 'DISABLED' WHERE email_normalized = ?")
+                .param(normalizeEmail(email)).update();
+        if (updated == 0) throw new PracticeError(404, "RESOURCE_NOT_FOUND");
+    }
+
+    public void deleteDisabled(String email) {
+        int deleted = jdbc.sql("DELETE FROM users WHERE email_normalized = ? AND state = 'DISABLED'")
+                .param(normalizeEmail(email)).update();
+        if (deleted == 0) throw new PracticeError(409, "ACCOUNT_NOT_DISABLED_OR_MISSING");
     }
 
     record Profile(String userId, String email) {}
