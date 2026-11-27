@@ -5,11 +5,11 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Map;
 
+import cn.shiinapple.promptpractice.common.SqliteWrites;
 import cn.shiinapple.promptpractice.practice.PracticeError;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -18,12 +18,12 @@ class WorkspaceStore {
     private static final String DRAFT_KEY = "user_id = :owner AND problem_id = :problem AND version = :version";
     private final JdbcClient jdbc;
     private final ObjectMapper json;
-    private final TransactionTemplate write;
+    private final SqliteWrites write;
 
     WorkspaceStore(JdbcClient jdbc, ObjectMapper json, PlatformTransactionManager transactions) {
         this.jdbc = jdbc;
         this.json = json;
-        this.write = new TransactionTemplate(transactions);
+        this.write = new SqliteWrites(transactions, jdbc);
     }
 
     Settings settings(String owner) {
@@ -52,7 +52,7 @@ class WorkspaceStore {
 
     Draft saveDraft(String owner, String problem, int version, String caseId, Map<String, String> slots, long revision) {
         String encoded = json.writeValueAsString(slots);
-        return write.execute(status -> {
+        return write.execute(() -> {
             String sql = revision == 0 ? """
                     INSERT INTO drafts(user_id, problem_id, version, case_id, slots_json, revision, updated_at)
                     VALUES (:owner, :problem, :version, :caseId, :slots, 1, :now)

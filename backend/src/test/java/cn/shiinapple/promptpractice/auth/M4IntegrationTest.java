@@ -6,12 +6,15 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 
+import cn.shiinapple.promptpractice.judge.JudgeService;
 import cn.shiinapple.promptpractice.practice.PracticeError;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -22,10 +25,13 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext
@@ -40,6 +46,8 @@ class M4IntegrationTest {
     @LocalServerPort int port;
     @Autowired Accounts accounts;
     @Autowired JdbcClient jdbc;
+    @Autowired DataSource database;
+    @MockitoSpyBean JudgeService judge;
     @Autowired ObjectMapper json;
 
     @Test
@@ -146,6 +154,113 @@ class M4IntegrationTest {
             assertEquals(java.util.Set.of(200, 409), java.util.Set.of(left.status, right.status));
             assertEquals(2, (left.status == 409 ? left : right).body.path("details").path("serverRevision").asLong());
         }
+    }
+
+    @Test
+    void archivesOnlyOwnCompletedRunsIdempotentlyAndDeletesOnlyTheMarker() throws Exception {
+        var a = login(createUser());
+        var b = login(createUser());
+        String run = newRun(a);
+        assertEquals(409, write("POST", "/api/submissions", a, Map.of("runId", run)).status);
+        assertEquals(404, write("POST", "/api/submissions", b, Map.of("runId", run)).status);
+        assertEquals(404, get("/api/runs/" + run, b).status);
+        assertEquals(200, complete(a, run).status);
+        clearInvocations(judge);
+        var archived = write("POST", "/api/submissions", a, Map.of("runId", run));
+        assertEquals(201, archived.status);
+        var retry = write("POST", "/api/submissions", a, Map.of("runId", run));
+        assertEquals(200, retry.status);
+        assertEquals(archived.body, retry.body);
+        String id = archived.body.path("submissionId").asText();
+        var item = get("/api/submissions", a).body.path("items").path(0);
+        assertEquals(id, item.path("submissionId").asText());
+        assertFalse(item.has("rawOutput"));
+        assertFalse(item.has("messages"));
+        assertEquals(0, get("/api/submissions", b).body.path("items").size());
+        assertEquals(404, write("DELETE", "/api/submissions/" + id, b, null).status);
+        assertEquals(204, write("DELETE", "/api/submissions/" + id, a, null).status);
+        assertEquals(0, get("/api/submissions", a).body.path("items").size());
+        assertEquals("{}", get("/api/runs/" + run, a).body.path("rawOutput").asText());
+        verifyNoInteractions(judge);
+    }
+
+    @Test
+    void paginatesByTimestampAndIdAndRejectsForeignOrMismatchedCursors() throws Exception {
+        var a = login(createUser());
+        var b = login(createUser());
+        String older = newRun(a);
+        String newer = newRun(a);
+        String latest = newRun(a);
+        newRun(b);
+        jdbc.sql("UPDATE runs SET created_at = 1000 WHERE id IN (?, ?, ?)").params(older, newer, latest).update();
+        jdbc.sql("UPDATE prompt_snapshots SET version = 1 WHERE id = (SELECT snapshot_id FROM runs WHERE id = ?)")
+                .param(older).update();
+        for (String run : java.util.List.of(older, newer, latest)) {
+            assertEquals(200, complete(a, run).status);
+            assertEquals(201, write("POST", "/api/submissions", a, Map.of("runId", run)).status);
+        }
+        var expected = new HashSet<>(java.util.List.of(older, newer, latest));
+        for (String collection : java.util.List.of("/api/problems/002/runs", "/api/submissions")) {
+            String path = collection + "?limit=1";
+            var ids = new HashSet<String>();
+            var versions = new HashSet<Integer>();
+            var page = get(path, a);
+            assertEquals(200, page.status);
+            String cursor = page.body.path("nextCursor").asText();
+            assertFalse(cursor.isBlank());
+            assertEquals(400, get(path + "&cursor=" + cursor, b).status);
+            assertEquals(400, get("/api/problems/001/runs?cursor=" + cursor, a).status);
+            assertEquals(400, get(path + "&cursor=tampered", a).status);
+            if (collection.endsWith("/runs")) {
+                assertEquals(400, get("/api/submissions?cursor=" + cursor, a).status);
+                newRun(a);
+            }
+            for (int index = 0; index < 3; index++) {
+                var items = page.body.path("items");
+                assertEquals(1, items.size());
+                assertFalse(items.path(0).has("rawOutput"));
+                assertFalse(items.path(0).has("messages"));
+                assertTrue(ids.add(items.path(0).path("runId").asText()));
+                versions.add(items.path(0).path("version").asInt());
+                if (index < 2) page = get(path + "&cursor=" + page.body.path("nextCursor").asText(), a);
+            }
+            assertTrue(page.body.path("nextCursor").isNull());
+            assertEquals(expected, ids);
+            assertEquals(java.util.Set.of(1, 2), versions);
+        }
+    }
+
+    @Test
+    void mapsArchiveBusyTimeoutTo503AndAllowsRetry() throws Exception {
+        var session = login(createUser());
+        String run = newRun(session);
+        assertEquals(200, complete(session, run).status);
+        try (var connection = database.getConnection(); var statement = connection.createStatement()) {
+            statement.execute("BEGIN IMMEDIATE");
+            try {
+                var result = write("POST", "/api/submissions", session, Map.of("runId", run));
+                assertEquals(503, result.status);
+                assertEquals("TEMPORARILY_UNAVAILABLE", result.body.path("code").asText());
+            } finally {
+                statement.execute("ROLLBACK");
+            }
+        }
+        assertEquals(201, write("POST", "/api/submissions", session, Map.of("runId", run)).status);
+        assertEquals(201, write("PUT", "/api/problems/002/draft", session, draftBody(2, 0, "after busy")).status);
+        assertEquals(409, write("PUT", "/api/problems/002/draft", session, draftBody(2, 0, "conflict after busy")).status);
+    }
+
+    private String newRun(Session session) throws Exception {
+        var body = Map.of("problemId", "002", "version", 2, "caseId", "case-1", "mode", "D0",
+                "slots", Map.of("user", "{{requirement}}"));
+        var reply = send("POST", "/api/runs", session.cookie, session.token, body,
+                Map.of("Idempotency-Key", UUID.randomUUID().toString()));
+        assertEquals(201, reply.status);
+        return reply.body.path("runId").asText();
+    }
+
+    private Reply complete(Session session, String runId) throws Exception {
+        return write("POST", "/api/runs/" + runId + "/result", session, Map.of("status", "COMPLETED", "rawOutput", "{}"));
     }
 
     private Session login(User user) throws Exception {

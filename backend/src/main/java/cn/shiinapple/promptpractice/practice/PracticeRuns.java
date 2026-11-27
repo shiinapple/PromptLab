@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
@@ -23,9 +22,8 @@ import java.net.InetAddress;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import org.sqlite.SQLiteException;
 
+import cn.shiinapple.promptpractice.common.SqliteWrites;
 import cn.shiinapple.promptpractice.judge.JudgeService;
 import cn.shiinapple.promptpractice.problem.ProblemCatalog;
 import tools.jackson.databind.JsonNode;
@@ -43,7 +41,7 @@ public class PracticeRuns implements ApplicationRunner {
             """;
 
     private final JdbcClient jdbc;
-    private final TransactionTemplate write;
+    private final SqliteWrites write;
     private final ProblemCatalog catalog;
     private final JudgeService judge;
     private final String localOwner;
@@ -59,7 +57,7 @@ public class PracticeRuns implements ApplicationRunner {
             String owner, Clock clock) {
         if (owner != null && !owner.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("Invalid local subject");
         this.jdbc = jdbc;
-        this.write = new TransactionTemplate(transactions);
+        this.write = new SqliteWrites(transactions, jdbc);
         this.catalog = catalog;
         this.judge = judge;
         this.localOwner = owner;
@@ -87,7 +85,7 @@ public class PracticeRuns implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         var packs = catalog.loadReleasedVersions();
-        inWrite(() -> {
+        write.execute(() -> {
             long now = clock.millis();
             if (localOwner != null) {
                 jdbc.sql("INSERT INTO users(id, created_at) VALUES (:owner, :now) ON CONFLICT DO NOTHING")
@@ -144,7 +142,7 @@ public class PracticeRuns implements ApplicationRunner {
         }
         String slots = JSON.writeValueAsString(new TreeMap<>(intent.slots()));
         String assembled = JSON.writeValueAsString(messages);
-        return inWrite(() -> {
+        return write.execute(() -> {
             Stored winner = byKey(owner, key);
             if (winner != null) return reused(winner, digest);
             long now = clock.millis();
@@ -203,8 +201,8 @@ public class PracticeRuns implements ApplicationRunner {
         String verdict = grade == null ? null : grade.verdict();
         String checks = grade == null ? null : JSON.writeValueAsString(grade.checks());
         String reported = intent.reported().isEmpty() ? null : JSON.writeValueAsString(intent.reported());
-        return inWrite(() -> {
-            // TransactionTemplate has acquired the IMMEDIATE write reservation before this clock read.
+        return write.execute(() -> {
+            // SqliteWrites has acquired the write reservation before this clock read.
             long now = clock.millis();
             int updated = jdbc.sql("""
                     UPDATE runs SET status = :status, result_digest = :digest, raw_output = :raw,
@@ -255,19 +253,6 @@ public class PracticeRuns implements ApplicationRunner {
     private static JsonNode json(ResultSet rs, String column) throws SQLException {
         String data = rs.getString(column);
         return data == null ? null : JSON.readTree(data);
-    }
-
-    private <T> T inWrite(Supplier<T> operation) {
-        try {
-            return write.execute(status -> operation.get());
-        } catch (RuntimeException error) {
-            for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-                if (cause instanceof SQLiteException sqlite && (sqlite.getResultCode().code & 0xff) == 5) {
-                    throw new PracticeError(503, "TEMPORARILY_UNAVAILABLE");
-                }
-            }
-            throw error;
-        }
     }
 
     private static String digest(Object ordered) {
