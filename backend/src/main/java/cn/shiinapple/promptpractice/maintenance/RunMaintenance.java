@@ -1,5 +1,7 @@
 package cn.shiinapple.promptpractice.maintenance;
 
+import java.time.Duration;
+
 import cn.shiinapple.promptpractice.common.SqliteWrites;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -8,14 +10,13 @@ import org.springframework.transaction.PlatformTransactionManager;
 @Component
 public class RunMaintenance {
     private static final int BATCH_SIZE = 100;
+    private static final long RETENTION_MILLIS = Duration.ofDays(30).toMillis();
     private final JdbcClient jdbc;
     private final SqliteWrites writes;
-    private final RunRetention retention;
 
-    RunMaintenance(JdbcClient jdbc, PlatformTransactionManager transactions, RunRetention retention) {
+    RunMaintenance(JdbcClient jdbc, PlatformTransactionManager transactions) {
         this.jdbc = jdbc;
         this.writes = new SqliteWrites(transactions, jdbc);
-        this.retention = retention;
     }
 
     public Result sweep() {
@@ -39,13 +40,11 @@ public class RunMaintenance {
                     DELETE FROM prompt_snapshots
                     WHERE id IN (
                         SELECT r.snapshot_id FROM runs r
-                        WHERE r.status <> 'PENDING'
-                          AND ((r.mode = 'D0' AND r.created_at <= :d0) OR (r.mode = 'DIRECT' AND r.created_at <= :direct))
+                        WHERE r.finished_at <= :cutoff
                           AND NOT EXISTS (SELECT 1 FROM submissions a WHERE a.run_id = r.id AND a.user_id = r.user_id)
-                        ORDER BY r.created_at, r.id LIMIT :batch
+                        ORDER BY r.finished_at, r.id LIMIT :batch
                     )
-                    """).param("d0", now - retention.d0().toMillis())
-                    .param("direct", now - retention.direct().toMillis()).param("batch", BATCH_SIZE).update();
+                    """).param("cutoff", now - RETENTION_MILLIS).param("batch", BATCH_SIZE).update();
         });
     }
 

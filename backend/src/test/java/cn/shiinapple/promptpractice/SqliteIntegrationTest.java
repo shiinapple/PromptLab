@@ -37,10 +37,10 @@ class SqliteIntegrationTest {
         Path file = directory.resolve("data with spaces").resolve("baseline.sqlite3");
         try (var context = start(file)) {
             assertTrue(Files.isRegularFile(file));
-            assertEquals("5", version(context));
+            assertEquals("6", version(context));
         }
         try (var context = start(file)) {
-            assertEquals("5", version(context));
+            assertEquals("6", version(context));
             assertEquals(1L, context.getBean(JdbcClient.class)
                     .sql("SELECT count(*) FROM flyway_schema_history WHERE version = '1'")
                     .query(Long.class).single());

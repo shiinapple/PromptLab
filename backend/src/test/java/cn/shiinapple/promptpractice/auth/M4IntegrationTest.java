@@ -293,10 +293,11 @@ class M4IntegrationTest {
         assertEquals(200, complete(session, archived).status);
         String archiveId = write("POST", "/api/submissions", session, Map.of("runId", archived))
                 .body.path("submissionId").asText();
-        age(archived, Duration.ofHours(25));
+        ageTerminal(archived, Duration.ofDays(31));
         long now = System.currentTimeMillis();
+        long oldDeadline = now - Duration.ofDays(31).toMillis();
         jdbc.sql("UPDATE runs SET created_at = ?, expires_at = ? WHERE id = ?")
-                .params(now - Duration.ofMinutes(11).toMillis(), now - 1000, expired).update();
+                .params(oldDeadline - Duration.ofMinutes(10).toMillis(), oldDeadline, expired).update();
         var sweep = maintenance.sweep();
         assertEquals(1, sweep.expired());
         assertEquals(1, sweep.deletedSnapshots());
@@ -315,7 +316,7 @@ class M4IntegrationTest {
             String run = newRun(session);
             assertEquals(200, complete(session, run).status);
             String snapshot = jdbc.sql("SELECT snapshot_id FROM runs WHERE id = ?").param(run).query(String.class).single();
-            age(run, Duration.ofHours(25));
+            ageTerminal(run, Duration.ofDays(31));
             var start = new CountDownLatch(1);
             try (var workers = Executors.newFixedThreadPool(2)) {
                 var archive = workers.submit(() -> {
@@ -444,11 +445,31 @@ class M4IntegrationTest {
         }
     }
 
-    private void age(String run, Duration age) {
-        long timestamp = System.currentTimeMillis() - age.toMillis();
-        jdbc.sql("UPDATE runs SET created_at = ? WHERE id = ?").params(timestamp, run).update();
+    @Test
+    void retentionStartsAtTerminalTimeAndLeavesDraftsAlone() throws Exception {
+        var user = createUser();
+        var session = login(user);
+        String draft = "/api/problems/002/draft";
+        assertEquals(201, write("PUT", draft, session, draftBody(2, 0, "long-lived")).status);
+        jdbc.sql("UPDATE drafts SET updated_at = 1 WHERE user_id = ?").param(user.id).update();
+        String recentResult = newRun(session);
+        assertEquals(200, complete(session, recentResult).status);
+        jdbc.sql("UPDATE runs SET created_at = 1 WHERE id = ?").param(recentResult).update();
+
+        assertEquals(0, maintenance.sweep().deletedSnapshots());
+        assertEquals(200, get("/api/runs/" + recentResult, session).status);
+        ageTerminal(recentResult, Duration.ofDays(31));
+        assertEquals(1, maintenance.sweep().deletedSnapshots());
+        assertEquals(404, get("/api/runs/" + recentResult, session).status);
+        assertEquals("long-lived", get(draft, session).body.at("/draft/slots/user").asText());
+    }
+
+    private void ageTerminal(String run, Duration age) {
+        long finished = System.currentTimeMillis() - age.toMillis();
+        jdbc.sql("UPDATE runs SET created_at = ?, finished_at = ? WHERE id = ?")
+                .params(finished - 1000, finished, run).update();
         jdbc.sql("UPDATE prompt_snapshots SET created_at = ? WHERE id = (SELECT snapshot_id FROM runs WHERE id = ?)")
-                .params(timestamp, run).update();
+                .params(finished - 1000, run).update();
     }
 
     private String newRun(Session session) throws Exception {
