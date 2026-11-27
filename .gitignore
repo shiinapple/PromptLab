@@ -1,0 +1,34 @@
+# 系统与编辑器
+.DS_Store
+.vscode/
+.idea/
+
+# 构建产物与依赖
+node_modules/
+/backend/target/
+/frontend/dist/
+*.tsbuildinfo
+
+# 本地数据与日志
+/data/
+/backend/data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.log
+# POC-04 的容器运行日志是公开证据
+!/poc/java-sqlite/results/linux-container.log
+
+# 密钥与环境变量
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 打包与归档
+*.zip
+
+# 只留在本机：个人报告、日志、笔记、早期原稿，以及助手内部笔记
+/docs/personal/
+/docs/agent/

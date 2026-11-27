@@ -31,3 +31,9 @@
 | HTTPS 与 loopback 候选 CSP | Chrome 允许 `http://127.0.0.1:*` 和 `http://localhost:*` 的本机请求，拦截未列入的 `127.0.0.2`，并触发 `connect-src`、`script-src-elem`、`object-src` 违规事件。嵌入用例中，对照页正常装入 iframe，设置 `frame-ancestors 'none'` 的测试页被拦截。 |
 
 真实 HTTPS 环境需授权的测试站 Origin、目标网关及测试条件。尚未验证真实 Nginx/HTTPS 响应头、公网模型源、IPv6 loopback、目标浏览器矩阵、带 opener 的会话复制、跨标签页注销同步和正式 Markdown 渲染。候选策略的 `connect-src https:` 允许任意 HTTPS 来源，无法阻止所有经 HTTPS 发出的数据。Q10 保持待确认。
+
+## 2026-11-26 M2 正式前端回归
+
+`npm --prefix frontend run test:e2e` 退出 0。正式 SPA 的虚构 Key 只出现在选定模型请求的 Authorization 和显式启用的当前标签页会话副本。Chrome 网络记录、同源 API、服务进程日志抽查、临时 SQLite 主文件及 WAL、非敏感配置、导出请求均未含该值。设置为默认内存时刷新清除，显式会话保留时同页签刷新可用。独立新标签页没有会话副本。取消地址变更未访问新地址，确认后新地址首次请求无认证头。清除、删除与模型回显原样 Key 的拒绝也通过。账号切换与退出目前覆盖存储逻辑单测，真实账号流程随 M4 接入。
+
+模型返回的 HTML 和 Markdown 标记按原文展示，未创建 DOM 子节点或访问探针页面。使用 [Nginx CSP 候选片段](../../deploy/nginx/csp.conf) 的同一份策略值在打包预览中验证了回环模型请求、同源平台 API、脚本/对象限制和嵌入拒绝。固定来源允许已登记源，候选 `https:` 可匹配额外 HTTPS 源，Chrome DevTools 拦截模拟测试 URL 的响应，验证未拨出 HTTPS。候选 HTTP 例外为 `localhost` 和 `127.0.0.1`，采用可由 CSP 表达并验证的来源。候选的 `connect-src https:` 增加公网连接范围，默认支持策略、真证书/TLS、HTTPS 到本机的权限和实际 Nginx 响应头进入 M6/Q10。

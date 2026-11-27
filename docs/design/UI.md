@@ -1,7 +1,5 @@
 # 页面与统一做题交互
 
-> 来源：原方案 v0.2 第 4 节。拆分保留原意；示例不是已经实现或验证的功能。
-
 运行协议见 [MODEL_INTEGRATION](MODEL_INTEGRATION.md)，API 见 [ARCHITECTURE](ARCHITECTURE.md)。
 
 ## 4.1 全站导航与视觉原则

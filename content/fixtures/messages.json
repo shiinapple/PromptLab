@@ -1,0 +1,94 @@
+{
+  "plan": {
+    "slots": {
+      "user": {
+        "requiredVariables": [
+          "requirement"
+        ]
+      }
+    },
+    "messages": [
+      {
+        "role": "system",
+        "parts": [
+          {
+            "type": "fixedText",
+            "text": "Fixed: "
+          },
+          {
+            "type": "caseVariable",
+            "name": "context"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "type": "slot",
+            "name": "user"
+          }
+        ]
+      }
+    ]
+  },
+  "variables": {
+    "requirement": "边界 \"6\"\nnext $1 \\ {{context}}",
+    "context": "literal {{requirement}}"
+  },
+  "cases": [
+    {
+      "id": "chinese-and-quotes",
+      "slots": {
+        "user": "需求：{{requirement}}\n{\"cases\":[]}"
+      },
+      "expected": [
+        {
+          "role": "system",
+          "content": "Fixed: literal {{requirement}}"
+        },
+        {
+          "role": "user",
+          "content": "需求：边界 \"6\"\nnext $1 \\ {{context}}\n{\"cases\":[]}"
+        }
+      ]
+    },
+    {
+      "id": "english-and-escapes",
+      "slots": {
+        "user": "Show \\{{escaped}} and \\\\: {{requirement}} / {{requirement}}"
+      },
+      "expected": [
+        {
+          "role": "system",
+          "content": "Fixed: literal {{requirement}}"
+        },
+        {
+          "role": "user",
+          "content": "Show {{escaped}} and \\: 边界 \"6\"\nnext $1 \\ {{context}} / 边界 \"6\"\nnext $1 \\ {{context}}"
+        }
+      ]
+    },
+    {
+      "id": "required",
+      "slots": {
+        "user": "\\{{requirement}}"
+      },
+      "error": "MISSING_VARIABLE"
+    },
+    {
+      "id": "unknown",
+      "slots": {
+        "user": "{{unknown}} {{requirement}}"
+      },
+      "error": "UNKNOWN_VARIABLE"
+    },
+    {
+      "id": "empty",
+      "slots": {
+        "user": " \n"
+      },
+      "error": "EMPTY_SLOT"
+    }
+  ]
+}

@@ -77,4 +77,6 @@ M1 到本地 M3 使用显式本地测试主体。M4 生产形态下，除健康�
 | 429 / 503 | RATE_LIMITED、TEMPORARILY_UNAVAILABLE（受控负载或 DB 忙）；可用 Retry-After 表达重试时间 |
 | 500 | INTERNAL_ERROR，记录请求 ID 并返回通用提示 |
 
+M0 的 `GET /api/health` 在应用接受流量时返回 `200 {"status":"UP"}`。启动迁移完成后应用才进入就绪状态。应用拒绝流量时返回 `503 TEMPORARILY_UNAVAILABLE`。此接口读取应用就绪状态。M0 已覆盖 MVC 路由 404 `RESOURCE_NOT_FOUND` 和方法 405 `METHOD_NOT_ALLOWED`，405 保留 `Allow` 响应头。
+
 `FORMAT_ERROR` 和 `WRONG_ANSWER` 是判题结果，符合 API 载荷约束的作答正常返回 200。错误详情只返回预先允许的字段路径、枚举或安全数值，不含原始请求内容、SQL、栈、内部配置、模型地址和凭据。
