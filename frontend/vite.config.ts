@@ -12,9 +12,6 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '^/api(?:/|\\?|$)': `http://127.0.0.1:${apiPort}`,
       },
-      fs: {
-        allow: ['.', '../docs/personal/design/design-tokens.css'],
-      },
     },
   }
 })

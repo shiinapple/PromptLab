@@ -4,7 +4,7 @@
 
 ## 4.1 全站导航与视觉原则
 
-桌面优先，手机端允许纵向布局。顶栏：站点名称 / 题库 / 练习记录 / 模型设置 / 语言（中文、English）/ 账号；状态标签统一使用文字与图标，不能只靠颜色。布局、间距、背景、文字、边框、主按钮、成功/失败、圆角和焦点优先从用户提供的 [Design Token CSS](../personal/design/design-tokens.css) 映射。需要看实际样式时打开 [HTML 图册](../personal/design/design-tokens.html)。
+桌面优先，手机端允许纵向布局。顶栏：站点名称 / 题库 / 练习记录 / 模型设置 / 语言（中文、English）/ 账号；状态标签统一使用文字与图标，不能只靠颜色。布局、间距、背景、文字、边框、主按钮、成功/失败、圆角和焦点优先取自 [Design Token CSS](../../frontend/src/styles/tokens.css)，这是颜色、间距等样式值的唯一来源。需要看实际样式时在本机用浏览器打开 [HTML 图册](design-tokens.html)。
 
 UI 文案采用 Vue I18n key；错误返回稳定 code/messageKey，规则有中英文标签；JSON 字段名、模型 ID、API 路径和 run ID 不翻译。题目中文/英文 Markdown 分开，Prompt 模板及测试输入按题目配置决定是否共享或本地化。切换语言不覆盖已编辑 Prompt；若样例内容随语言变化，则作为明确 caseId/locale 绑定运行快照，而非悄悄换输入。优先首屏简洁，不显示无关参数与复杂 dashboard。
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { assembleMessages } from '../src/practice/messages.ts'
 import { checkOutput, importResponse, makeRequest, MAX_FILE_BYTES, MAX_OUTPUT_BYTES } from '../src/practice/d0.ts'
+import { editableSlot } from '../src/practice/slot.ts'
 
 const golden = JSON.parse(await readFile(new URL('../../content/fixtures/messages.json', import.meta.url)))
 for (const row of golden.cases) {
@@ -58,3 +59,14 @@ for (const [label, payload] of [
 ]) {
   test(`rejects ${label}`, async () => assert.rejects(importResponse(file(payload))))
 }
+
+test('editable slot name, role and required variables come from the problem plan', () => {
+  const plan = {
+    slots: { system: { requiredVariables: [] } },
+    messages: [
+      { role: 'system', parts: [{ type: 'slot', name: 'system' }] },
+      { role: 'user', parts: [{ type: 'caseVariable', name: 'question' }] },
+    ],
+  }
+  assert.deepEqual(editableSlot(plan), { name: 'system', role: 'system', requiredVariables: [] })
+})

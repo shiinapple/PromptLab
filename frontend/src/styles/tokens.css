@@ -217,6 +217,7 @@
   --font-size-body: 14px;
   --font-size-message: 13px;
   --font-size-label: 12px;
+  --font-size-heading: 18px;
   --font-weight-title: 700;
   --font-weight-medium: 600;
   --line-height-title: 1.15;
@@ -225,6 +226,8 @@
   --tracking-label: .04em;
 
   --page-width: 640px;
+  --content-width: 72rem;
+  --check-label-width: 7rem;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

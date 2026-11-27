@@ -65,7 +65,7 @@ poc/                              # 独立实验与证据
 
 包内按实际需要组织 Controller、Service、Repository；Controller 做 DTO、身份与 HTTP 映射，Service 管业务状态和事务边界，Repository 用 JdbcClient/参数化 SQL。其他模块使用公开入口，表由所属模块维护，外键保护跨模块引用。题库规则在 CI 通过组合测试调用 judge 校验，运行时 problem 和 judge 无互相依赖。先用 Java 包边界和可见性，后续出现越界依赖再考虑架构测试工具或拆 Maven 模块。
 
-前端 practice 编排状态并调用平台 API、model 直连适配器和 D0 文件适配器。model 持有连接和凭据，向 practice 只返回白名单结果。平台 API client 不接受网关配置；D0 文件在浏览器本地读写。题库/判题复用业务契约，页面共用现有 [Design Token](../personal/design/design-tokens.css)，在需要完整界面时按 [UI](UI.md) 验收。Vite 本地代理 `/api`，生产构建成静态资源。
+前端 practice 编排状态并调用平台 API、model 直连适配器和 D0 文件适配器。model 持有连接和凭据，向 practice 只返回白名单结果。平台 API client 不接受网关配置；D0 文件在浏览器本地读写。题库/判题复用业务契约，页面共用现有 [Design Token](../../frontend/src/styles/tokens.css)，在需要完整界面时按 [UI](UI.md) 验收。Vite 本地代理 `/api`，生产构建成静态资源。
 
 ## 一次运行的数据流
 

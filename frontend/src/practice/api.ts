@@ -1,4 +1,5 @@
 import type { Message, MessagePlan } from './messages'
+import { editableSlot } from './slot'
 
 export type Problem = MessagePlan & {
   problemId: string
@@ -74,9 +75,10 @@ async function post<T>(path: string, body: unknown, key?: string) {
 export const readProblem = (locale: 'zh-CN' | 'en') => getJson<Problem>(`/api/problems/002?locale=${locale}`)
 export const readRun = (id: string) => getJson<Run>(`/api/runs/${encodeURIComponent(id)}`)
 
-export function createRun(problem: Problem, caseId: string, user: string, mode: RunMode, key: string) {
+export function createRun(problem: Problem, caseId: string, text: string, mode: RunMode, key: string) {
   const { problemId, version } = problem
-  return post<Run>('/api/runs', { problemId, version, caseId, mode, slots: { user }, requestParams: {} }, key)
+  const slots = { [editableSlot(problem).name]: text }
+  return post<Run>('/api/runs', { problemId, version, caseId, mode, slots, requestParams: {} }, key)
 }
 
 export type RunResult = { status: 'COMPLETED'; rawOutput: string; reported?: DirectReport }

@@ -39,8 +39,8 @@ Case 1 固定输入：`外面下了很大的雨，我可以在这里待到天亮
   "type": "object",
   "required": ["name", "reply"],
   "properties": {
-    "name": {"type": "string", "minLength": 1},
-    "reply": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "pattern": "\\S"},
+    "reply": {"type": "string", "pattern": "\\S"},
     "in_character": {}
   },
   "additionalProperties": false
@@ -220,3 +220,33 @@ content/problems/
 - 同一版本可有两种展示文案；输入不同则建独立 caseId 并标记输入语言。发布后题面、输入、模板、规则、预期答案或资产变化都创建新版本，旧版本随发行保留；翻译修订也维护明确的版本记录。摘要基于固定文件顺序和相对路径/文件字节计算，重建必须可复现。
 - 构建时校验清单与资源路径、ID、双语资源、用例引用、未解析变量、角色顺序、规则操作、Schema 注册和 fixture 期望。后端校验运行用例、双语内容中实际使用的输入和资源摘要。浏览器只得到展示和组装需要的字段，所有判题规则由服务器选择。
 - 002 先验证 JSON 结构及边界值映射；001 验证通用题库页面及参考字段；003 需要图文适配和真实模型验证。通过率按公开用例统计，单次通过不代表整题或 Prompt 通用性。[POC-03 教学转化](../validation/POC-03.md#归档与教学转化) · [POC-07](../validation/POC-07.md)
+
+### M3 题包子集（待实现）
+
+加载器和判题器只支持下面列出的写法，其余写法加载时报错。任务见 [M3](../tasks/M3.md)。
+
+**Schema**
+
+| 写法 | 允许的键 | 判题含义 |
+|---|---|---|
+| 对象 | `type`、`required`、`additionalProperties`（固定 `false`）、`properties` | `required` 是 `properties` 的子集；出现的已声明字段都要校验；未声明的字段名报 `EXTRA_FIELD` |
+| 数组 | `type`、`items` | 逐项校验 |
+| `integer`、`boolean` | `type` | 同现状 |
+| 字符串 | `type`，可选 `pattern` | `pattern` 只接受 `\\S`（JSON 写法），要求至少有一个 Unicode 非空白字符，否则报 `BLANK`。Java 用 `UNICODE_CHARACTER_CLASS`，让全角空格也算空白 |
+| 任意值 `{}` | 无 | 只能用于对象的可选字段，不校验 |
+
+根节点仍须是带 2020-12 `$schema` 的对象。非空字符串用 `pattern` 表达：`minLength: 1` 会放过纯空格。
+
+**消息与变量**
+
+- `messages` 非空；`role` 为 `system`、`user` 或 `assistant`；片段类型为 `fixedText`、`caseVariable`、`slot`。
+- 每题有且只有一个编辑槽，并在 `messages` 中正好被引用一次。多槽题出现时再扩展。
+- 每个用例的变量名集合 = 槽的 `requiredVariables` ∪ 消息里 `caseVariable` 的名字。变量值是非空字符串。
+- 默认槽模板里的占位符仍须正好等于 `requiredVariables`。
+
+**用例与判定**
+
+- `caseIds` 非空且不重复，每个 ID 对应 `cases/<id>.json` 和 `fixtures/<id>.json`。
+- `assertions` 字段必填，可以是 `[]`，表示只判 JSON 与结构。
+
+**版本**：发布过的版本目录不再修改。增删用例、改题面或规则都新建版本。`content/problems/hashes.json` 记录每个版本的内容摘要，供测试核对；它和 `releases.json` 一样不参与摘要计算。单用例题包的摘要算法与现在一致。
