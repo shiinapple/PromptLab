@@ -1,16 +1,20 @@
 package cn.shiinapple.promptpractice.ops;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
+import java.nio.channels.FileChannel;
+import java.nio.channels.OverlappingFileLockException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,14 +31,15 @@ import org.sqlite.SQLiteDataSource;
 @Component
 class BackupFiles {
     private static final String RESTORED_NAME = "prompt-practice.sqlite3";
-    private static final Pattern GENERATED = Pattern.compile("prompt-practice-[0-9]+-[0-9a-f-]{36}\\.sqlite3");
+    private static final Pattern GENERATED = Pattern.compile("prompt-practice-([0-9]{1,13})-[0-9a-f-]{36}\\.sqlite3");
+    private static final int RETAINED_BACKUPS = 7;
     private static final List<String> TABLES = List.of("users", "problem_versions", "problem_cases", "user_settings",
             "drafts", "prompt_snapshots", "runs", "submissions");
     private final DataSource source;
     private final Duration retention;
 
-    BackupFiles(DataSource source, @Value("${prompt-practice.retention.backup:30d}") Duration retention) {
-        if (retention.isNegative() || retention.isZero()) throw new IllegalArgumentException("Invalid backup retention");
+    BackupFiles(DataSource source, @Value("${prompt-practice.retention.backup:0s}") Duration retention) {
+        if (retention.isNegative()) throw new IllegalArgumentException("Invalid backup retention");
         this.source = source;
         this.retention = retention;
     }
@@ -42,6 +47,22 @@ class BackupFiles {
     Path backup(Path directory) throws SQLException, IOException {
         Path root = directory.toAbsolutePath().normalize();
         createPrivateDirectoryIfMissing(root);
+        Path lockFile = root.resolve(".backup.lock");
+        try {
+            Files.createFile(lockFile, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+        } catch (FileAlreadyExistsException ignored) {
+            // Backup processes share this file; it must survive each individual backup.
+        }
+        try (var channel = FileChannel.open(lockFile, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+                var lock = channel.tryLock()) {
+            if (lock == null) throw new IOException("A backup is already running");
+            return publish(root);
+        } catch (OverlappingFileLockException busy) {
+            throw new IOException("A backup is already running", busy);
+        }
+    }
+
+    private Path publish(Path root) throws SQLException, IOException {
         Path staging = Files.createTempDirectory(root, ".backup-", privateDirectory());
         Path temporary = staging.resolve("snapshot.sqlite3");
         try {
@@ -52,9 +73,12 @@ class BackupFiles {
             }
             Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rw-------"));
             inspect(temporary);
+            try (var file = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+                file.force(true);
+            }
             Path saved = root.resolve("prompt-practice-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + ".sqlite3");
             Files.createLink(saved, temporary);
-            prune(root, saved, Instant.now().minus(retention));
+            prune(root, saved);
             return saved;
         } finally {
             Files.deleteIfExists(temporary);
@@ -65,8 +89,10 @@ class BackupFiles {
     static Restored restore(Path backup, Path directory) throws SQLException, IOException {
         Path source = backup.toAbsolutePath().normalize();
         if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Backup file does not exist");
-        if (Files.exists(source.resolveSibling(source.getFileName() + "-wal"), LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Restore requires a standalone backup");
+        for (String suffix : List.of("-wal", "-shm", "-journal")) {
+            if (Files.exists(source.resolveSibling(source.getFileName() + suffix), LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("Restore requires a standalone backup");
+            }
         }
         var original = inspect(source);
         Path root = directory.toAbsolutePath().normalize();
@@ -91,7 +117,11 @@ class BackupFiles {
     }
 
     private static void createPrivateDirectoryIfMissing(Path root) throws IOException {
-        if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(root, privateDirectory());
+        try {
+            Files.createDirectory(root, privateDirectory());
+        } catch (FileAlreadyExistsException ignored) {
+            // Validate the existing directory before touching its contents.
+        }
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)
                 || Files.getPosixFilePermissions(root).stream().anyMatch(BackupFiles::allowsOtherUsers)) {
             throw new IOException("Backup directory must be owner-only");
@@ -106,16 +136,32 @@ class BackupFiles {
         return PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------"));
     }
 
-    private static void prune(Path root, Path saved, Instant threshold) throws IOException {
-        try (DirectoryStream<Path> entries = Files.newDirectoryStream(root)) {
-            for (Path entry : entries) {
-                if (!entry.equals(saved) && GENERATED.matcher(entry.getFileName().toString()).matches()
-                        && Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)
-                        && Files.getLastModifiedTime(entry, LinkOption.NOFOLLOW_LINKS).toInstant().isBefore(threshold)) {
-                    Files.deleteIfExists(entry);
-                }
+    private void prune(Path root, Path saved) throws IOException {
+        var threshold = Instant.now().minus(retention);
+        List<Path> otherBackups;
+        try (var entries = Files.list(root)) {
+            otherBackups = entries.filter(entry -> !entry.equals(saved))
+                    .filter(entry -> GENERATED.matcher(entry.getFileName().toString()).matches())
+                    .filter(entry -> Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS))
+                    .sorted(Comparator.comparingLong(BackupFiles::backupTime)
+                            .thenComparing(entry -> entry.getFileName().toString()).reversed())
+                    .toList();
+        }
+        int kept = 1;
+        for (Path entry : otherBackups) {
+            if (kept >= RETAINED_BACKUPS || (!retention.isZero()
+                    && Files.getLastModifiedTime(entry, LinkOption.NOFOLLOW_LINKS).toInstant().isBefore(threshold))) {
+                Files.deleteIfExists(entry);
+            } else {
+                kept++;
             }
         }
+    }
+
+    private static long backupTime(Path entry) {
+        var matcher = GENERATED.matcher(entry.getFileName().toString());
+        if (!matcher.matches()) throw new IllegalArgumentException("Invalid backup filename");
+        return Long.parseLong(matcher.group(1));
     }
 
     private static Inspection inspect(Path file) throws SQLException {

@@ -55,6 +55,7 @@ class M4IntegrationTest {
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry registry) {
         registry.add("prompt-practice.database.path", () -> directory.resolve("m4.sqlite3").toString());
+        registry.add("prompt-practice.retention.backup", () -> "30d");
     }
 
     @LocalServerPort int port;
