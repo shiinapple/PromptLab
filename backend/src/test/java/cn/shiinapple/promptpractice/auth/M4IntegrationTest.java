@@ -79,6 +79,18 @@ class M4IntegrationTest {
     }
 
     @Test
+    void profileLoggingRedactsEmailWithoutChangingApiProjection() throws Exception {
+        var user = createUser();
+        var profile = accounts.active(user.id).orElseThrow();
+        assertFalse(profile.toString().contains(user.email));
+        assertFalse(profile.toString().contains(user.id));
+        var response = get("/api/me", login(user));
+        assertEquals(200, response.status);
+        assertEquals(user.id, response.body.path("userId").asText());
+        assertEquals(user.email, response.body.path("email").asText());
+    }
+
+    @Test
     void rotatesSessionAndCsrfAndInvalidatesOnLogout() throws Exception {
         assertEquals(401, send("GET", "/api/me", null, null, null).status);
         assertEquals(401, send("GET", "/api/problems", null, null, null).status);

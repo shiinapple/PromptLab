@@ -74,7 +74,13 @@ public class Accounts {
         if (deleted == 0) throw new PracticeError(409, "ACCOUNT_NOT_DISABLED_OR_MISSING");
     }
 
-    record Profile(String userId, String email) {}
+    record Profile(String userId, String email) {
+        @Override
+        public String toString() {
+            return "Profile[redacted]";
+        }
+    }
+
     private record Credential(String id, String hash) {
         @Override
         public String toString() {
