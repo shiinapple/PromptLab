@@ -70,21 +70,24 @@ async function closeSettings() {
     </div>
   </header>
   <main>
-    <h1>{{ problem?.title ?? 'Prompt 练习' }}</h1>
+    <h1>{{ problem?.title ?? t('Prompt 练习', 'Prompt practice') }}</h1>
     <LoginForm v-if="accountMode && authRequired" @signed-in="signedIn" />
     <p v-if="loading" role="status">{{ t('正在加载题目…', 'Loading problem…') }}</p>
-    <div v-if="conflict" class="feedback error" role="alert">
-      {{ t('草稿在其他地方已更新（服务器 revision', 'The draft changed elsewhere (server revision') }} {{ conflict.serverRevision }}）。
+    <div v-if="conflict" class="feedback error" role="alert" aria-live="assertive">
+      {{ t(`草稿在其他地方已更新（服务器 revision ${conflict.serverRevision}）。`,
+        `The draft changed elsewhere (server revision ${conflict.serverRevision}).`) }}
       <button type="button" :disabled="busy" @click="useServerDraft">{{ t('使用服务器版本', 'Use server draft') }}</button>
       <button type="button" :disabled="busy" @click="overwriteDraft">{{ t('用本地编辑覆盖', 'Overwrite with my edits') }}</button>
     </div>
-    <div v-if="error" class="feedback error" role="alert">{{ error }}</div>
+    <div v-if="error" class="feedback error" role="alert" aria-live="assertive">{{ error }}</div>
     <p v-if="notice" class="feedback" role="status">{{ notice }}</p>
     <button v-if="!problem && !loading" type="button" @click="load">{{ t('重新加载', 'Reload') }}</button>
     <OnboardingBanner v-if="showGuide" @configure="settingsOpen = true; guideOpen = false"
       @use-manual="setMode('D0'); closeGuide()" @close="closeGuide" />
-    <ModelSettings v-if="settingsOpen" id="model-settings" :store="store" :transport="transport"
-      @saved="syncConnection" @close="closeSettings" />
+    <div id="model-settings" :hidden="!settingsOpen">
+      <ModelSettings v-if="settingsOpen" :store="store" :transport="transport"
+        @saved="syncConnection" @close="closeSettings" />
+    </div>
     <nav v-if="problems.length" class="run-options" :aria-label="t('题目列表', 'Problems')">
       <button v-for="item in problems" :key="item.problemId" type="button" :disabled="loading"
         :aria-pressed="problem?.problemId === item.problemId" @click="selectProblem(item.problemId)">
@@ -109,7 +112,7 @@ async function closeSettings() {
           <div class="section-heading">
             <h2 id="run-heading">{{ t('本次运行', 'Current run') }} ·
               {{ run.mode === 'DIRECT' ? t('直连', 'Direct') : t('手动', 'Manual') }} · {{ run.caseId }}</h2>
-            <span id="run-status" class="mode" role="status" :class="{ passed: run.verdict === 'PASSED', failed }" :data-symbol="symbol">
+            <span id="run-status" class="mode" role="status" aria-live="polite" :class="{ passed: run.verdict === 'PASSED', failed }" :data-symbol="symbol">
               {{ title }}
             </span>
           </div>
@@ -128,12 +131,12 @@ async function closeSettings() {
             :stage="stage" :seconds="seconds" :unsaved="!!pending" :text="directText" :failure="lastFailure"
             @stop="stop" @retry-save="action(save)" @use-manual="setMode('D0')" />
           <ManualRunSection v-if="run.mode === 'D0' && run.status === 'PENDING'" v-model:confirmed="confirmed"
-            :raw="raw" :busy="busy" @copy-request="copyText(requestJson, t('请求已复制。', 'Request copied.'))"
+            :raw="raw" :busy="busy" @copy-request="copyText(requestJson, () => t('请求已复制。', 'Request copied.'))"
             @download="download" @import-file="importFile" @edit="edit" @grade="grade" />
           <template v-if="run.rawOutput !== null">
             <div class="section-heading">
               <h3>{{ t('模型原始正文', 'Original model output') }}</h3>
-              <button type="button" :disabled="busy" @click="copyText(run.rawOutput, t('正文已复制。', 'Output copied.'))">{{ t('复制正文', 'Copy output') }}</button>
+              <button type="button" :disabled="busy" @click="copyText(run.rawOutput, () => t('正文已复制。', 'Output copied.'))">{{ t('复制正文', 'Copy output') }}</button>
             </div>
             <pre id="graded-raw">{{ run.rawOutput }}</pre>
           </template>
@@ -198,17 +201,13 @@ input[type='checkbox'] { accent-color: var(--color-primary); }
 input[type='file'] { max-width: 100%; }
 .checks { list-style: none; padding: 0; margin: 0; }
 .checks li { display: grid; grid-template-columns: var(--check-label-width) minmax(0, 1fr); gap: var(--space-2); border-top: 1px solid var(--color-muted); padding: var(--space-2) 0; }
-@media (max-width: 48rem) {
-  .workspace { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
-  main, .panel { padding: var(--space-4); }
-}
-</style>
 pre { max-width: 100%; overflow-x: auto; }
 /* 窄屏断点 768px（48rem）：与 tokens.css 注释及 app/useNarrow.ts 保持一致。 */
 @media (max-width: 48rem) {
   main { padding: var(--space-5) var(--space-4); }
   .site-header div { flex-wrap: wrap; padding: var(--space-3) var(--space-4); }
-  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .workspace { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
   .panel { padding: var(--space-4); }
   .actions { justify-content: flex-start; }
 }
+</style>

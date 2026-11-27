@@ -1,11 +1,11 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ApiError, authListeners, createRun, readProblem, readProblems, readRun, type Grading, type Problem, type ProblemSummary, type Run, type RunMode } from './api'
+import { ApiError, errorMessage, authListeners, createRun, readProblem, readProblems, readRun, type Grading, type Problem, type ProblemSummary, type Run, type RunMode } from './api'
 import { detectAccountMode, logout as endSession, me, readDraft, readSettings, saveLocale, writeDraft, type Profile } from './account'
 import { makeRequest } from './d0'
 import { assembleMessages } from './messages'
 import { editableSlot } from './slot'
 import { previewError } from './labels'
-import { useFeedback } from './useFeedback'
+import { useFeedback, type FeedbackMessage } from './useFeedback'
 import { useDirectRun } from './useDirectRun'
 import { useManualRun } from './useManualRun'
 import { useConnection } from '../model/useConnection'
@@ -30,7 +30,7 @@ export function usePractice() {
   const settingsOpen = ref(false)
   const mode = ref<RunMode>(model.ready() ? 'DIRECT' : 'D0')
   const snapshotDraft = ref<string>()
-  const direct = useDirectRun(run, feedback.error, model.store, model.transport)
+  const direct = useDirectRun(run, feedback.errorText, model.store, model.transport)
   const manual = useManualRun(run, feedback, model.guardKey)
   // 同一份意图重试时复用幂等键，避免网络抖动创建出两条运行。
   let retry: { body: string; key: string } | undefined
@@ -147,7 +147,7 @@ export function usePractice() {
         conflict.value = { problemId: target.problemId, version: target.version, caseId, text,
           serverRevision: Number(err.details.serverRevision ?? 0) }
       } else {
-        feedback.error.value = (err as Error).message
+        feedback.errorText.value = () => errorMessage(err)
       }
     } finally {
       draftSaving.value = false
@@ -167,7 +167,7 @@ export function usePractice() {
         saved.set(key, prompt.value)
       }
       conflict.value = undefined
-      feedback.notice.value = t('已采用服务器上的草稿。', 'Loaded the server draft.')
+      feedback.noticeText.value = () => t('已采用服务器上的草稿。', 'Loaded the server draft.')
     })
   }
 
@@ -180,7 +180,7 @@ export function usePractice() {
     conflict.value = undefined
     await feedback.action(async () => {
       if (problem.value) await saveDraft(problem.value, current.caseId, current.text)
-      if (!conflict.value) feedback.notice.value = t('已用本地编辑覆盖草稿。', 'Overwrote the server draft.')
+      if (!conflict.value) feedback.noticeText.value = () => t('已用本地编辑覆盖草稿。', 'Overwrote the server draft.')
     })
   }
 
@@ -193,7 +193,7 @@ export function usePractice() {
       await displayProblem(current)
       prompt.value = text
       await flushDraft()
-      feedback.notice.value = t('已复制到当前版本。', 'Copied to the current version.')
+      feedback.noticeText.value = () => t('已复制到当前版本。', 'Copied to the current version.')
     })
   }
 
@@ -208,7 +208,7 @@ export function usePractice() {
 
   async function load() {
     loading.value = true
-    feedback.error.value = ''
+    feedback.errorText.value = undefined
     try {
       const url = new URL(location.href)
       const runId = url.searchParams.get('run')
@@ -224,7 +224,7 @@ export function usePractice() {
         mode.value = restored.mode
       }
     } catch (err) {
-      if (!authRequired.value) feedback.error.value = (err as Error).message
+      if (!authRequired.value) feedback.errorText.value = () => errorMessage(err)
     } finally {
       loading.value = false
     }
@@ -247,7 +247,7 @@ export function usePractice() {
       url.searchParams.set('problem', restored.problemId)
       history.replaceState(null, '', url)
     } catch (err) {
-      feedback.error.value = (err as Error).message
+      feedback.errorText.value = () => errorMessage(err)
     } finally {
       loading.value = false
     }
@@ -264,7 +264,7 @@ export function usePractice() {
       url.searchParams.delete('run')
       history.replaceState(null, '', url)
     } catch (err) {
-      feedback.error.value = (err as Error).message
+      feedback.errorText.value = () => errorMessage(err)
     } finally {
       loading.value = false
     }
@@ -311,16 +311,16 @@ export function usePractice() {
       if (selectedMode === 'DIRECT' && profile && frozen.status === 'PENDING') {
         await direct.start(frozen, profile)
       } else if (selectedMode === 'D0') {
-        feedback.notice.value = t('运行已建立，可以复制或下载请求。', 'Run created. Copy or download the request.')
+        feedback.noticeText.value = () => t('运行已建立，可以复制或下载请求。', 'Run created. Copy or download the request.')
       }
     })
   }
 
-  async function copyText(text: string, success: string) {
+  async function copyText(text: string, success: FeedbackMessage) {
     await feedback.action(async () => {
       model.guardKey(text)
       await navigator.clipboard.writeText(text)
-      feedback.notice.value = success
+      feedback.noticeText.value = success
     })
   }
 
@@ -329,7 +329,7 @@ export function usePractice() {
     try {
       model.guardKey(requestJson.value)
     } catch (err) {
-      feedback.error.value = (err as Error).message
+      feedback.errorText.value = () => errorMessage(err)
       return
     }
     const url = URL.createObjectURL(new Blob([requestJson.value], { type: 'application/json' }))
@@ -355,7 +355,7 @@ export function usePractice() {
       try {
         await saveLocale(next)
       } catch {
-        feedback.error.value = t('语言已切换，但偏好保存失败，请稍后重试。', 'Language switched, but saving the preference failed. Try again later.')
+        feedback.errorText.value = () => t('语言已切换，但偏好保存失败，请稍后重试。', 'Language switched, but saving the preference failed. Try again later.')
       }
     }
     await refreshDisplay(next)
@@ -371,7 +371,7 @@ export function usePractice() {
       problems.value = list.items
       problem.value = { ...problem.value, title: data.title, description: data.description }
     } catch (err) {
-      feedback.error.value = (err as Error).message
+      feedback.errorText.value = () => errorMessage(err)
     }
   }
 

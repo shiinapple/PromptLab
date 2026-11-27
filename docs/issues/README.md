@@ -12,6 +12,10 @@
 | [006](006-single-problem.md) | 题号写死为 002 | 阻塞多题 | FIXED | M3-03 |
 | [007](007-historical-version.md) | 读题接口只返回当前版本 | 发新版后旧运行配错题面 | FIXED | M3-04 |
 | [008](008-single-case.md) | 每题只能有一个用例 | 阻塞多用例 | FIXED | M3-05 |
+| [009](009-m5-locale-contract-sync.md) | M5 locale 契约同步 | 文档同步 | FIXED（M5 工作树） | M5-01 |
+| [010](010-problem-query-locale-validation.md) | 题目查询的 locale 校验 | 接口契约 | FIXED | M5-01 |
+| [011](011-settings-locale-error-code.md) | PATCH settings 的非法 locale 错误码 | 接口契约 | FIXED | M5-01 |
+| [012](012-direct-error-stale-locale.md) | 切换语言后直连错误提示残留旧语言 | 双语显示 | FIXED | M5-02 |
 
 状态为 `OPEN`、`FIXED`（附测试证据）或 `WONTFIX`（附原因）。新问题接着编号，修复后保留文件。
 

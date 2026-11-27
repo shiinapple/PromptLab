@@ -30,7 +30,7 @@ const hints = computed(() => (failed.value && !props.busy && props.run.status !=
   <p v-if="run.failureCode && !error" class="help">{{ modelMessage(new ModelError(run.failureCode)) }}</p>
   <div v-if="stage === 'request' || unsaved || (run.status !== 'COMPLETED' && selectedMode !== 'D0')" class="actions">
     <template v-if="stage === 'request'">
-      <span class="meta" role="status">{{ seconds }} s</span>
+      <span class="meta" role="status" aria-live="polite">{{ seconds }} s</span>
       <button type="button" @click="$emit('stop')">{{ t('停止请求', 'Stop request') }}</button>
     </template>
     <button v-if="unsaved && !busy" type="button" @click="$emit('retrySave')">

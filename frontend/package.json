@@ -11,6 +11,7 @@
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "test:e2e": "node test/practice.e2e.mjs",
     "test:accounts": "node test/accounts.e2e.mjs",
+    "test:m5": "node test/accounts.e2e.mjs --m5",
     "typecheck": "vue-tsc --noEmit",
     "build": "vite build"
   },

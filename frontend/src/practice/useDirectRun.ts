@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, ref, shallowRef, type Ref } from 'vue'
-import { ApiError, readRun, submitResult, type Run, type RunResult } from './api'
+import { ApiError, errorMessage, readRun, submitResult, type Run, type RunResult } from './api'
 import { makeRequest } from './d0'
+import type { FeedbackMessage } from './useFeedback'
 import type { ConnectionStore, ConnectionProfile } from '../model/connection'
 import { ModelError, type DirectTransport } from '../model/direct'
 import { modelMessage, t } from '../model/copy'
@@ -8,7 +9,7 @@ import { modelMessage, t } from '../model/copy'
 export type DirectStage = 'request' | 'saving'
 
 /** 浏览器直连：发请求、接收流、停止，再把结果交给平台保存。 */
-export function useDirectRun(run: Ref<Run | undefined>, error: Ref<string>, store: ConnectionStore, transport: DirectTransport) {
+export function useDirectRun(run: Ref<Run | undefined>, error: Ref<FeedbackMessage | undefined>, store: ConnectionStore, transport: DirectTransport) {
   const text = ref('')
   const stage = ref<DirectStage>()
   const seconds = ref(0)
@@ -53,7 +54,7 @@ export function useDirectRun(run: Ref<Run | undefined>, error: Ref<string>, stor
       const failure = abort.signal.aborted ? new ModelError('CANCELED')
         : err instanceof ModelError ? err : new ModelError('PROTOCOL_ERROR')
       lastFailure.value = failure
-      error.value = modelMessage(failure)
+      error.value = () => modelMessage(failure)
       result = failure.code === 'CANCELED' ? { status: 'CANCELED' }
         : { status: 'FAILED', failureCode: failure.failureCode }
     } finally {
@@ -76,7 +77,8 @@ export function useDirectRun(run: Ref<Run | undefined>, error: Ref<string>, stor
         run.value = await readRun(attempt.id).catch(() => run.value)
         if (run.value?.status !== 'PENDING') pending.value = undefined
       }
-      error.value = [error.value, t('保存结果失败。', 'Could not save the result.'), (err as Error).message].filter(Boolean).join(' ')
+      const requestError = error.value
+      error.value = () => [requestError?.(), t('保存结果失败。', 'Could not save the result.'), errorMessage(err)].filter(Boolean).join(' ')
     } finally {
       stage.value = undefined
     }

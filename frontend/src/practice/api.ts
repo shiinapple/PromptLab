@@ -49,6 +49,10 @@ export class ApiError extends Error {
   }
 }
 
+export function errorMessage(error: unknown): string {
+  return error instanceof ApiError ? apiErrorMessage(error.code, error.status) : (error as Error).message
+}
+
 /** 账号模式下业务接口返回 AUTH_REQUIRED 时，页面切回登录界面。 */
 export const authListeners = new Set<() => void>()
 

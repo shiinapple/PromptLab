@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { once } from 'node:events'
+import { verifyM5 } from './m5.e2e.mjs'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 // M4-05：两个预建账号在独立浏览器上下文中的隔离、冲突、退出与重新登录。
@@ -14,6 +15,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const temp = await mkdtemp(join(tmpdir(), 'promptlab-m4-e2e-'))
 const children = []
+const m5 = process.argv.includes('--m5')
 let socket
 
 const ACCOUNTS = {
@@ -102,10 +104,14 @@ try {
   socket = new WebSocket(browserSocket)
   await once(socket, 'open')
 
+  const requestsBySession = new Map()
   let sequence = 0
   const pending = new Map()
   socket.addEventListener('message', ({ data }) => {
     const message = JSON.parse(data)
+    if (message.method === 'Network.requestWillBeSent') {
+      requestsBySession.get(message.sessionId)?.push(message.params.request)
+    }
     const entry = pending.get(message.id)
     if (!entry) return
     pending.delete(message.id)
@@ -131,8 +137,16 @@ try {
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true })
     await send('Runtime.enable', {}, sessionId)
     await send('Page.enable', {}, sessionId)
+    const requests = []
+    if (m5) {
+      requestsBySession.set(sessionId, requests)
+      await send('Network.enable', {}, sessionId)
+    }
     const context = {
       sessionId,
+      requests,
+      cdp: (method, params) => send(method, params, sessionId),
+      browserCdp: (method, params) => send(method, { ...params, browserContextId }),
       async page(expression) {
         const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId)
         if (response.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description ?? 'Chrome evaluation error')
@@ -165,6 +179,19 @@ try {
       .catch(async err => { throw new Error(`${err.message}; page=${await context.page("document.body.innerText.slice(0, 300)")}`) })
   }
 
+  if (m5) {
+    await verifyM5({ openContext, signIn, accounts: ACCOUNTS, origin, app, root })
+  } else {
+    await verifyAccounts({ openContext, signIn, app })
+  }
+} finally {
+  socket?.close()
+  for (const { child } of children) child.kill()
+  await Promise.all(children.map(({ child }) => (child.exitCode === null ? once(child, 'exit') : null)))
+  await rm(temp, { recursive: true, force: true })
+}
+
+async function verifyAccounts({ openContext, signIn, app }) {
   const alice = await openContext()
   const bob = await openContext()
   await alice.go(app)
@@ -240,9 +267,4 @@ try {
   await bob.waitFor("document.querySelector('[role=alert]')?.textContent.includes('邮箱或密码不正确')", 'uniform credential error')
 
   console.log('PASS M4 multi-account browser: isolation, archive, revision conflict, logout and re-login')
-} finally {
-  socket?.close()
-  for (const { child } of children) child.kill()
-  await Promise.all(children.map(({ child }) => (child.exitCode === null ? once(child, 'exit') : null)))
-  await rm(temp, { recursive: true, force: true })
 }
