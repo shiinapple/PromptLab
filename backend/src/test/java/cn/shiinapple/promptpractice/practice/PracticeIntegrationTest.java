@@ -76,7 +76,7 @@ class PracticeIntegrationTest {
         assertThat(english.path("title").stringValue()).isEqualTo("Requirements to Test Cases");
         assertThat(english.at("/cases/0/variables")).isEqualTo(chinese.at("/cases/0/variables"));
         assertThat(english.toString()).doesNotContain("assertions", "boundary-mapping", "schema");
-        assertThat(get("/api/problems").body().at("/items/0/problemId").stringValue()).isEqualTo("002");
+        assertThat(get("/api/problems").body().at("/items/1/problemId").stringValue()).isEqualTo("002");
         String key = UUID.randomUUID().toString();
         var original = create(key, "查看：{{requirement}}");
         assertThat(original.status()).isEqualTo(201);
@@ -100,6 +100,43 @@ class PracticeIntegrationTest {
         assertThat(reloaded.path("rawOutput").stringValue()).isEqualTo(raw);
         assertThat(reloaded.path("messages")).isEqualTo(original.body().path("messages"));
         assertThat(next.body().path("messages")).isNotEqualTo(reloaded.path("messages"));
+    }
+
+    @Test
+    void listsPublishedProblemsAndGradesSample001UsingItsSystemSlot() throws Exception {
+        var items = get("/api/problems?locale=en").body().path("items");
+        assertThat(items).hasSize(2);
+        assertThat(items.get(0).path("problemId").stringValue()).isEqualTo("001");
+        assertThat(items.get(0).path("title").stringValue()).isEqualTo("The Night Watcher of Moon Harbor");
+        assertThat(items.get(0).path("difficulty").stringValue()).isEqualTo("beginner");
+        assertThat(get("/api/problems/001").body().at("/cases/0/grading").stringValue()).isEqualTo("STRUCTURE_ONLY");
+        assertThat(get("/api/problems/002").body().at("/cases/0/grading").stringValue()).isEqualTo("RULES");
+        for (String unknown : new String[]{"009", "invalid"}) {
+            var missing = get("/api/problems/" + unknown);
+            assertThat(missing.status()).isEqualTo(404);
+            assertThat(missing.body().path("code").stringValue()).isEqualTo("RESOURCE_NOT_FOUND");
+            var intent = new java.util.HashMap<>(createBody("{{requirement}}"));
+            intent.put("problemId", unknown);
+            assertThat(post("/api/runs", intent, UUID.randomUUID().toString(), token).status()).isEqualTo(404);
+        }
+        var pack = catalog.loadPublished("001");
+        for (var fixture : pack.fixtures()) {
+            var intent = new java.util.HashMap<>(createBody("{{requirement}}"));
+            intent.put("problemId", "001");
+            intent.put("slots", Map.of("system", "你是艾琳。"));
+            var created = post("/api/runs", intent, UUID.randomUUID().toString(), token);
+            assertThat(created.status()).isEqualTo(201);
+            assertThat(created.body().at("/messages/0/role").stringValue()).isEqualTo("system");
+            assertThat(created.body().at("/messages/0/content").stringValue()).isEqualTo("你是艾琳。");
+            assertThat(created.body().at("/messages/1/content")).isEqualTo(pack.publicCase().at("/variables/question"));
+            var result = complete(id(created), fixture.path("rawOutput").stringValue());
+            assertThat(result.body().path("verdict")).as(fixture.path("id").stringValue())
+                    .isEqualTo(fixture.path("verdict"));
+            if ("missing-reply".equals(fixture.path("id").stringValue())) {
+                assertThat(result.body().at("/checks/1/path").stringValue()).isEqualTo("/reply");
+                assertThat(result.body().at("/checks/1/code").stringValue()).isEqualTo("REQUIRED");
+            }
+        }
     }
 
     @Test

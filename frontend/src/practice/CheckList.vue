@@ -8,7 +8,7 @@ defineProps<{ checks: Check[] }>()
 <template>
   <ul class="checks">
     <li v-for="check in checks" :key="check.id" :class="{ 'field-error': check.status === 'FAIL' }">
-      <strong>{{ checkLabel(check.id) }}</strong>
+      <strong>{{ checkLabel(check) }}</strong>
       <span>{{ check.status === 'PASS' ? '通过' : describeFailure(check) }}</span>
     </li>
   </ul>

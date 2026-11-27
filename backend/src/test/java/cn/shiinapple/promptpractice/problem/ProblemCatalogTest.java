@@ -54,8 +54,8 @@ class ProblemCatalogTest {
     void rejectsAProblemNotInTheReleaseManifest() {
         var catalog = new ProblemCatalog(new DefaultResourceLoader());
 
-        assertThatThrownBy(() -> catalog.loadPublished("001")).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("release for 001");
+        assertThatThrownBy(() -> catalog.loadPublished("009")).isInstanceOf(ProblemCatalog.UnknownProblem.class)
+                .hasMessageContaining("release for 009");
     }
 
     @Test

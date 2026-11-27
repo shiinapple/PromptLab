@@ -35,7 +35,6 @@ import tools.jackson.databind.json.JsonMapper;
 @Profile("local-practice")
 public class PracticeRuns implements ApplicationRunner {
     static final JsonMapper JSON = JsonMapper.builder().build();
-    static final String PROBLEM_ID = "002";
     private static final long TTL = Duration.ofHours(24).toMillis();
     private static final String SELECT = """
             SELECT r.*, s.problem_id, s.version, s.case_id, s.messages_json, s.request_params_json, v.content_hash
@@ -70,21 +69,23 @@ public class PracticeRuns implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        var pack = catalog.loadPublished(PROBLEM_ID);
+        var packs = catalog.loadPublished();
         inWrite(() -> {
             long now = clock.millis();
             jdbc.sql("INSERT INTO users(id, created_at) VALUES (:owner, :now) ON CONFLICT DO NOTHING")
                     .param("owner", owner).param("now", now).update();
-            jdbc.sql("""
-                    INSERT INTO problem_versions(problem_id, version, content_hash, published_at)
-                    VALUES (:id, :version, :hash, :now) ON CONFLICT DO NOTHING
-                    """).param("id", pack.problemId()).param("version", pack.version())
-                    .param("hash", pack.contentHash()).param("now", now).update();
-            String hash = jdbc.sql("SELECT content_hash FROM problem_versions WHERE problem_id = :id AND version = :version")
-                    .param("id", pack.problemId()).param("version", pack.version()).query(String.class).single();
-            if (!hash.equals(pack.contentHash())) throw new IllegalStateException("Published problem bytes changed");
-            jdbc.sql("INSERT INTO problem_cases VALUES (:id, :version, :caseId) ON CONFLICT DO NOTHING")
-                    .param("id", pack.problemId()).param("version", pack.version()).param("caseId", pack.caseId()).update();
+            for (var pack : packs) {
+                jdbc.sql("""
+                        INSERT INTO problem_versions(problem_id, version, content_hash, published_at)
+                        VALUES (:id, :version, :hash, :now) ON CONFLICT DO NOTHING
+                        """).param("id", pack.problemId()).param("version", pack.version())
+                        .param("hash", pack.contentHash()).param("now", now).update();
+                String hash = jdbc.sql("SELECT content_hash FROM problem_versions WHERE problem_id = :id AND version = :version")
+                        .param("id", pack.problemId()).param("version", pack.version()).query(String.class).single();
+                if (!hash.equals(pack.contentHash())) throw new IllegalStateException("Published problem bytes changed");
+                jdbc.sql("INSERT INTO problem_cases VALUES (:id, :version, :caseId) ON CONFLICT DO NOTHING")
+                        .param("id", pack.problemId()).param("version", pack.version()).param("caseId", pack.caseId()).update();
+            }
             return null;
         });
     }
@@ -95,7 +96,6 @@ public class PracticeRuns implements ApplicationRunner {
         Stored existing = byKey(key);
         if (existing != null) return reused(existing, digest);
 
-        if (!PROBLEM_ID.equals(intent.problemId())) throw new PracticeError(404, "RESOURCE_NOT_FOUND");
         var pack = catalog.loadPublished(intent.problemId());
         if (intent.version() != pack.version()) throw new PracticeError(409, "VERSION_CHANGED");
         if (!intent.caseId().equals(pack.caseId())) throw new PracticeError(422, "INVALID_CASE");

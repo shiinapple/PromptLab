@@ -64,17 +64,16 @@ class PracticeController {
     @GetMapping("/api/problems")
     ResponseEntity<?> problems(HttpServletRequest request, @RequestParam(defaultValue = "zh-CN") String locale) throws IOException {
         local(request);
-        var pack = catalog.loadPublished(PracticeRuns.PROBLEM_ID);
-        var text = localized(pack, locale);
-        return ok(Map.of("items", List.of(Map.of("problemId", pack.problemId(), "version", pack.version(),
-                "title", text.path("title"), "category", pack.problem().path("category")))));
+        var items = catalog.loadPublished().stream().map(pack -> Map.of(
+                "problemId", pack.problemId(), "version", pack.version(), "title", localized(pack, locale).path("title"),
+                "category", pack.problem().path("category"), "difficulty", pack.problem().path("difficulty"))).toList();
+        return ok(Map.of("items", items));
     }
 
     @GetMapping("/api/problems/{id}")
     ResponseEntity<?> problem(HttpServletRequest request, @PathVariable String id,
             @RequestParam(defaultValue = "zh-CN") String locale) throws IOException {
         local(request);
-        if (!PracticeRuns.PROBLEM_ID.equals(id)) throw new PracticeError(404, "RESOURCE_NOT_FOUND");
         var pack = catalog.loadPublished(id);
         var text = localized(pack, locale);
         return ok(Map.of(
@@ -83,7 +82,8 @@ class PracticeController {
                 "defaultSlots", text.path("defaultSlots"), "slots", pack.problem().path("slots"),
                 "messages", pack.problem().path("messages"),
                 "cases", List.of(Map.of("caseId", pack.caseId(), "inputLocale", pack.publicCase().path("inputLocale"),
-                        "variables", pack.publicCase().path("variables")))));
+                        "variables", pack.publicCase().path("variables"),
+                        "grading", pack.publicCase().path("assertions").isEmpty() ? "STRUCTURE_ONLY" : "RULES"))));
     }
 
     @PostMapping(path = "/api/runs", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -219,6 +219,11 @@ class PracticeController {
                 csrf.getBytes(StandardCharsets.UTF_8))) {
             throw new PracticeError(403, "CSRF_INVALID");
         }
+    }
+
+    @ExceptionHandler(ProblemCatalog.UnknownProblem.class)
+    ResponseEntity<ProblemDetail> unknownProblem() {
+        return error(new PracticeError(404, "RESOURCE_NOT_FOUND"));
     }
 
     @ExceptionHandler(PracticeError.class)

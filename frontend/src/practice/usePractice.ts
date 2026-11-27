@@ -1,5 +1,5 @@
 import { computed, onMounted, ref } from 'vue'
-import { createRun, readProblem, readRun, type Problem, type Run, type RunMode } from './api'
+import { createRun, readProblem, readProblems, readRun, type Grading, type Problem, type ProblemSummary, type Run, type RunMode } from './api'
 import { makeRequest } from './d0'
 import { assembleMessages } from './messages'
 import { editableSlot } from './slot'
@@ -15,7 +15,11 @@ import { english, t } from '../model/copy'
 export function usePractice() {
   const model = useConnection()
   const feedback = useFeedback()
+  const problems = ref<ProblemSummary[]>([])
   const problem = ref<Problem>()
+  const runGrading = ref<Grading>()
+  const drafts = new Map<string, string>()
+  const locale = english ? 'en' : 'zh-CN'
   const run = ref<Run>()
   const prompt = ref('')
   const loading = ref(false)
@@ -55,18 +59,46 @@ export function usePractice() {
     feedback.clear()
   }
 
+  function displayProblem(data: Problem) {
+    if (problem.value) drafts.set(problem.value.problemId, prompt.value)
+    problem.value = data
+    prompt.value = drafts.get(data.problemId) ?? data.defaultSlots[editableSlot(data).name]
+  }
+
   async function load() {
     loading.value = true
     feedback.error.value = ''
     try {
-      const data = await readProblem(english ? 'en' : 'zh-CN')
-      problem.value = data
-      restoreTemplate()
-      const runId = new URL(location.href).searchParams.get('run')
-      if (runId) {
-        run.value = await readRun(runId)
-        mode.value = run.value.mode
+      const url = new URL(location.href)
+      const runId = url.searchParams.get('run')
+      const [list, restored] = await Promise.all([readProblems(locale), runId ? readRun(runId) : undefined])
+      problems.value = list.items
+      const id = restored?.problemId ?? url.searchParams.get('problem') ?? problems.value[0]?.problemId
+      if (!id) throw new Error(t('没有可用题目。', 'No problems available.'))
+      const data = await readProblem(id, locale)
+      displayProblem(data)
+      if (restored) {
+        run.value = restored
+        runGrading.value = data.cases.find(item => item.caseId === restored.caseId)?.grading
+        mode.value = restored.mode
       }
+    } catch (err) {
+      feedback.error.value = (err as Error).message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function selectProblem(id: string) {
+    if (loading.value || id === problem.value?.problemId) return
+    loading.value = true
+    feedback.clear()
+    try {
+      displayProblem(await readProblem(id, locale))
+      const url = new URL(location.href)
+      url.searchParams.set('problem', id)
+      url.searchParams.delete('run')
+      history.replaceState(null, '', url)
     } catch (err) {
       feedback.error.value = (err as Error).message
     } finally {
@@ -81,17 +113,21 @@ export function usePractice() {
     const frozen = await createRun(selected, caseId, text, selectedMode, retry.key)
     retry = undefined
     run.value = frozen
+    runGrading.value = selected.cases.find(item => item.caseId === frozen.caseId)?.grading
     snapshotDraft.value = text
     manual.reset()
     direct.reset()
     const url = new URL(location.href)
-    url.searchParams.set('run', frozen.runId)
+    if (problem.value?.problemId === frozen.problemId) {
+      url.searchParams.set('run', frozen.runId)
+      url.searchParams.set('problem', frozen.problemId)
+    }
     history.replaceState(null, '', url)
     return frozen
   }
 
   async function freeze() {
-    if (!problem.value || !publicCase.value || !preview.value.messages || feedback.busy.value) return
+    if (loading.value || !problem.value || !publicCase.value || !preview.value.messages || feedback.busy.value) return
     // await 之后页面状态可能已经变了，先把本次要用的值固定下来。
     const selected = problem.value
     const caseId = publicCase.value.caseId
@@ -140,7 +176,7 @@ export function usePractice() {
 
   return {
     model, feedback, direct, manual,
-    problem, publicCase, run, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
-    load, setMode, freeze, copyText, download,
+    problems, problem, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
+    load, selectProblem, setMode, freeze, copyText, download,
   }
 }

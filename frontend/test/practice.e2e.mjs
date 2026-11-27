@@ -140,6 +140,37 @@ try {
   })
   await send('Network.enable', { maxPostDataSize: 2_000_000 })
   await send('Page.navigate', { url: origin })
+  await waitFor("document.querySelector('h1')?.textContent === '月港酒馆的守夜人'", 'first published problem')
+  assert.equal(await page("document.querySelector('label[for=prompt]').textContent"), 'System Prompt')
+  const tavernDraft = '你是艾琳。只输出 JSON。'
+  const testDraft = '保留 002 草稿 {{requirement}}'
+  await change('#prompt', tavernDraft)
+  await clickText('创建运行')
+  await waitFor("document.querySelector('#run-status')?.textContent.trim() === '等待导入'", '001 pending run')
+  const tavernRun = await page("new URL(location.href).searchParams.get('run')")
+  assert.deepEqual(await page("JSON.parse(document.querySelector('#frozen-request').textContent).messages"), [
+    { role: 'system', content: tavernDraft },
+    { role: 'user', content: '外面下了很大的雨，我可以在这里待到天亮吗？' },
+  ])
+  await clickText('002 · 需求转测试用例')
+  await waitFor("document.querySelector('h1')?.textContent === '需求转测试用例'", 'switch to 002')
+  await change('#prompt', testDraft)
+  const pendingTavern = await (await fetch(`${origin}/api/runs/${tavernRun}`)).json()
+  assert.equal(pendingTavern.problemId, '001')
+  assert.equal(pendingTavern.status, 'PENDING')
+  assert.match(await page("document.querySelector('#run-id').textContent"), /^001 ·/)
+  await change('#raw', '{"name":"艾琳","reply":"去炉火边坐吧。"}')
+  await confirmGrade('JSON 格式通过；人设表现未自动评价')
+  await clickText('001 · 月港酒馆的守夜人')
+  await waitFor(`document.querySelector('#prompt')?.value === ${JSON.stringify(tavernDraft)}`, '001 draft restored')
+  await clickText('002 · 需求转测试用例')
+  await waitFor(`document.querySelector('#prompt')?.value === ${JSON.stringify(testDraft)}`, '002 draft restored')
+  await send('Page.navigate', { url: origin + '/?problem=002&run=' + tavernRun })
+  await waitFor("document.querySelector('h1')?.textContent === '月港酒馆的守夜人'", 'run determines problem on reload')
+  await waitFor("document.querySelector('#run-status')?.textContent.trim() === 'JSON 格式通过；人设表现未自动评价'", 'restored 001 verdict')
+  console.log('PASS 001 system slot and manual grading, independent problem drafts and pending run identity')
+
+  await send('Page.navigate', { url: origin + '/?problem=002' })
   await waitFor("document.querySelector('h1')?.textContent === '需求转测试用例'", 'localized problem')
   await change('#prompt', '没有必需变量')
   assert.equal(await page("document.querySelector('button.primary').disabled"), true)

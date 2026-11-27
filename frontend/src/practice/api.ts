@@ -1,13 +1,22 @@
 import type { Message, MessagePlan } from './messages'
 import { editableSlot } from './slot'
 
+export type Grading = 'STRUCTURE_ONLY' | 'RULES'
+export type ProblemSummary = {
+  problemId: string
+  version: number
+  title: string
+  category: string
+  difficulty: string
+}
+
 export type Problem = MessagePlan & {
   problemId: string
   version: number
   title: string
   description: string
   defaultSlots: Record<string, string>
-  cases: { caseId: string; inputLocale: string; variables: Record<string, string> }[]
+  cases: { caseId: string; inputLocale: string; grading: Grading; variables: Record<string, string> }[]
 }
 
 export type Check = { id: string; path: string; status: 'PASS' | 'FAIL'; code: string; expected: unknown; actual: unknown }
@@ -72,7 +81,10 @@ async function post<T>(path: string, body: unknown, key?: string) {
   return getJson<T>(path, { method: 'POST', headers, body: JSON.stringify(body) })
 }
 
-export const readProblem = (locale: 'zh-CN' | 'en') => getJson<Problem>(`/api/problems/002?locale=${locale}`)
+type Locale = 'zh-CN' | 'en'
+export const readProblems = (locale: Locale) => getJson<{ items: ProblemSummary[] }>(`/api/problems?locale=${locale}`)
+export const readProblem = (id: string, locale: Locale) =>
+  getJson<Problem>(`/api/problems/${encodeURIComponent(id)}?locale=${locale}`)
 export const readRun = (id: string) => getJson<Run>(`/api/runs/${encodeURIComponent(id)}`)
 
 export function createRun(problem: Problem, caseId: string, text: string, mode: RunMode, key: string) {

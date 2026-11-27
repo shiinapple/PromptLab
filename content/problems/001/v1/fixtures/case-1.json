@@ -1,0 +1,56 @@
+[
+  {
+    "id": "example",
+    "rawOutput": "{\"name\": \"艾琳\", \"reply\": \"门没锁。去炉火旁坐着吧，等雨停了再走。\", \"in_character\": true}",
+    "verdict": "PASSED",
+    "failedCheckIds": []
+  },
+  {
+    "id": "optional-missing",
+    "rawOutput": "{\"name\": \"Eileen\", \"reply\": \"Come in.\"}",
+    "verdict": "PASSED",
+    "failedCheckIds": []
+  },
+  {
+    "id": "self-report-false",
+    "rawOutput": "{\"name\": \"艾琳\", \"reply\": \"…\", \"in_character\": false}",
+    "verdict": "PASSED",
+    "failedCheckIds": []
+  },
+  {
+    "id": "self-report-any",
+    "rawOutput": "{\"name\": \"旅人\", \"reply\": \"坐吧。\", \"in_character\": {\"notes\": []}}",
+    "verdict": "PASSED",
+    "failedCheckIds": []
+  },
+  {
+    "id": "plain-text",
+    "rawOutput": "好的，你可以留下。",
+    "verdict": "FORMAT_ERROR",
+    "failedCheckIds": []
+  },
+  {
+    "id": "missing-reply",
+    "rawOutput": "{\"name\": \"艾琳\"}",
+    "verdict": "FORMAT_ERROR",
+    "failedCheckIds": []
+  },
+  {
+    "id": "wrong-type",
+    "rawOutput": "{\"name\": \"艾琳\", \"reply\": 123}",
+    "verdict": "FORMAT_ERROR",
+    "failedCheckIds": []
+  },
+  {
+    "id": "blank-reply",
+    "rawOutput": "{\"name\": \"艾琳\", \"reply\": \"　\"}",
+    "verdict": "FORMAT_ERROR",
+    "failedCheckIds": []
+  },
+  {
+    "id": "unknown-field",
+    "rawOutput": "{\"name\": \"艾琳\", \"reply\": \"坐吧。\", \"extra\": true}",
+    "verdict": "FORMAT_ERROR",
+    "failedCheckIds": []
+  }
+]

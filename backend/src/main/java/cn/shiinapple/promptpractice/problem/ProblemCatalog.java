@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.TreeMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -39,15 +40,31 @@ public class ProblemCatalog {
         this.resources = resources;
     }
 
+    public List<ProblemPack> loadPublished() {
+        return releases().entrySet().stream()
+                .map(entry -> loadVersion(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
     public ProblemPack loadPublished(String problemId) {
-        require(problemId != null && problemId.matches("[0-9]{3}"), "Invalid problem ID");
-        JsonNode release = read("releases.json", new TreeMap<>()).path(problemId);
-        if (release.isMissingNode()) {
-            throw new UnknownProblem(problemId);
+        Integer version = problemId == null ? null : releases().get(problemId);
+        if (version == null) throw new UnknownProblem(problemId);
+        return loadVersion(problemId, version);
+    }
+
+    private Map<String, Integer> releases() {
+        JsonNode manifest = read("releases.json", new TreeMap<>());
+        require(manifest.isObject(), "Expected a problem release object");
+        Map<String, Integer> releases = new TreeMap<>();
+        for (var entry : manifest.properties()) {
+            String id = entry.getKey();
+            JsonNode release = entry.getValue();
+            require(id.matches("[0-9]{3}") && release.isIntegralNumber()
+                            && release.canConvertToInt() && release.intValue() > 0,
+                    "Invalid release for " + id);
+            releases.put(id, release.intValue());
         }
-        require(release.isIntegralNumber() && release.canConvertToInt() && release.intValue() > 0,
-                "Missing or invalid release for " + problemId);
-        return loadVersion(problemId, release.intValue());
+        return releases;
     }
 
     public ProblemPack loadVersion(String problemId, int version) {

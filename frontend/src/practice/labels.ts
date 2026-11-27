@@ -1,4 +1,4 @@
-import type { Check, Run } from './api'
+import type { Check, Grading, Run } from './api'
 import type { DirectStage } from './useDirectRun'
 import { t } from '../model/copy'
 
@@ -14,7 +14,10 @@ const titles = {
   FORMAT_ERROR: t('格式错误', 'Format error'), WRONG_ANSWER: t('答案错误', 'Wrong answer'),
 }
 
-export function runTitle(run: Run, stage: DirectStage | undefined, unsaved: boolean): string {
+export function runTitle(run: Run, stage: DirectStage | undefined, unsaved: boolean, grading?: Grading): string {
+  if (run.verdict === 'PASSED' && grading === 'STRUCTURE_ONLY') {
+    return t('JSON 格式通过；人设表现未自动评价', 'JSON format passed. Character portrayal was not graded.')
+  }
   if (run.mode === 'DIRECT' && run.status === 'PENDING') {
     if (stage === 'request') return t('正在请求模型', 'Requesting model')
     if (stage === 'saving') return t('正在保存结果', 'Saving result')
@@ -29,7 +32,10 @@ const checkLabels: Record<string, string> = {
   'unique-lengths': '长度不重复', 'boundary-mapping': '边界判断',
 }
 
-export const checkLabel = (id: string) => checkLabels[id] ?? id
+export function checkLabel(check: Check): string {
+  if (check.id === 'schema' && check.path) return check.path
+  return checkLabels[check.id] ?? check.id
+}
 
 export function describeFailure(check: Check): string {
   switch (check.code) {

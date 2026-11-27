@@ -1,0 +1,8 @@
+{
+  "caseId": "case-1",
+  "inputLocale": "zh-CN",
+  "variables": {
+    "question": "外面下了很大的雨，我可以在这里待到天亮吗？"
+  },
+  "assertions": []
+}
