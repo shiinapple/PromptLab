@@ -31,7 +31,8 @@ export function usePractice() {
   // 同一份意图重试时复用幂等键，避免网络抖动创建出两条运行。
   let retry: { body: string; key: string } | undefined
 
-  const publicCase = computed(() => problem.value?.cases[0])
+  const selectedCaseId = ref<string>()
+  const publicCase = computed(() => problem.value?.cases.find(item => item.caseId === selectedCaseId.value))
   const historical = computed(() => !!problem.value && problem.value.version < problem.value.publishedVersion)
   const slot = computed(() => problem.value && editableSlot(problem.value))
   const preview = computed(() => {
@@ -60,9 +61,10 @@ export function usePractice() {
     feedback.clear()
   }
 
-  function displayProblem(data: Problem) {
+  function displayProblem(data: Problem, caseId = data.cases[0]?.caseId) {
     if (problem.value) drafts.set(`${problem.value.problemId}/${problem.value.version}`, prompt.value)
     problem.value = data
+    selectedCaseId.value = caseId
     prompt.value = drafts.get(`${data.problemId}/${data.version}`) ?? data.defaultSlots[editableSlot(data).name]
   }
 
@@ -77,7 +79,7 @@ export function usePractice() {
       const id = restored?.problemId ?? url.searchParams.get('problem') ?? problems.value[0]?.problemId
       if (!id) throw new Error(t('没有可用题目。', 'No problems available.'))
       const data = await readProblem(id, locale, restored?.version)
-      displayProblem(data)
+      displayProblem(data, restored?.caseId)
       if (restored) {
         run.value = restored
         runGrading.value = data.cases.find(item => item.caseId === restored.caseId)?.grading
@@ -105,6 +107,11 @@ export function usePractice() {
     } finally {
       loading.value = false
     }
+  }
+
+  function selectCase(id: string) {
+    if (loading.value || !problem.value?.cases.some(item => item.caseId === id)) return
+    selectedCaseId.value = id
   }
 
   async function freezeRun(selected: Problem, caseId: string, text: string, selectedMode: RunMode) {
@@ -178,6 +185,6 @@ export function usePractice() {
   return {
     model, feedback, direct, manual,
     problems, problem, historical, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
-    load, selectProblem, setMode, freeze, copyText, download,
+    load, selectProblem, selectCase, setMode, freeze, copyText, download,
   }
 }

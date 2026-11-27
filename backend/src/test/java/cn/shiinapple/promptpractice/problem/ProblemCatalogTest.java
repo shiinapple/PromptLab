@@ -37,16 +37,16 @@ class ProblemCatalogTest {
     }
 
     @Test
-    void loadsThePublishedVersionAndCaseFromPackagedResources() {
-        var pack = new ProblemCatalog(new DefaultResourceLoader()).loadPublished("002");
+    void loadsTheOriginalVersionAndCaseFromPackagedResources() {
+        var pack = new ProblemCatalog(new DefaultResourceLoader()).loadVersion("002", 1);
 
         assertThat(pack.problemId()).isEqualTo("002");
         assertThat(pack.version()).isEqualTo(1);
-        assertThat(pack.caseId()).isEqualTo("case-1");
+        assertThat(pack.cases().getFirst().caseId()).isEqualTo("case-1");
         assertThat(pack.translations()).containsOnlyKeys("zh-CN", "en");
-        assertThat(pack.publicCase().path("variables").path("requirement").stringValue()).contains("5、6、7、11、12、13");
+        assertThat(pack.cases().getFirst().variables().path("requirement").stringValue()).contains("5、6、7、11、12、13");
         assertThat(pack.schema().at("/properties/cases/items/properties/length/type").stringValue()).isEqualTo("integer");
-        assertThat(pack.fixtures()).extracting(fixture -> fixture.path("verdict").stringValue())
+        assertThat(pack.cases().getFirst().fixtures()).extracting(fixture -> fixture.path("verdict").stringValue())
                 .containsExactly("PASSED", "FORMAT_ERROR", "FORMAT_ERROR", "WRONG_ANSWER");
     }
 
@@ -91,7 +91,7 @@ class ProblemCatalogTest {
                 {"caseId":"case-1","inputLocale":"zh-CN","variables":{}}
                 """);
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Case variables", "requirement");
     }
 
@@ -101,7 +101,7 @@ class ProblemCatalogTest {
                 {"title":"Test cases","description":"Generate cases","defaultSlots":{"user":"Generate cases."}}
                 """);
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("i18n/en.json", "Variable placeholders");
     }
 
@@ -115,7 +115,7 @@ class ProblemCatalogTest {
                 }
                 """);
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("schema.json/cases/items", "Unsupported schema type");
     }
 
@@ -134,10 +134,10 @@ class ProblemCatalogTest {
                         [{"id":"valid","rawOutput":"{\\"reply\\":\\"yes\\"}","verdict":"PASSED","failedCheckIds":[]}]
                         """));
 
-        var pack = catalog.loadPublished("002");
+        var pack = catalog.loadVersion("002", 1);
 
-        assertThat(pack.publicCase().path("assertions").isArray()).isTrue();
-        assertThat(pack.publicCase().path("assertions").size()).isZero();
+        assertThat(pack.cases().getFirst().assertions().isArray()).isTrue();
+        assertThat(pack.cases().getFirst().assertions().size()).isZero();
         assertThat(pack.schema().at("/properties/reply/pattern").stringValue()).isEqualTo("\\S");
         assertThat(pack.schema().at("/properties/in_character").isObject()).isTrue();
     }
@@ -149,7 +149,7 @@ class ProblemCatalogTest {
                 {"caseId":"case-1","inputLocale":"zh-CN","variables":{"requirement":"input"}%s}
                 """.formatted(assertions));
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Missing case assertions");
     }
 
@@ -168,7 +168,7 @@ class ProblemCatalogTest {
     void rejectsUnsupportedSchemasForARequiredProperty(String schema) {
         var catalog = withReplacement("schema.json", OBJECT_SCHEMA.formatted("[\"a\"]", "{\"a\":" + schema + "}"));
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("schema.json/a");
     }
 
@@ -176,7 +176,7 @@ class ProblemCatalogTest {
     void rejectsAnUndeclaredRequiredField() {
         var catalog = withReplacement("schema.json", OBJECT_SCHEMA.formatted("[\"a\"]", "{}"));
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Required fields must be declared in properties");
     }
 
@@ -184,7 +184,7 @@ class ProblemCatalogTest {
     void rejectsAnEmptyRootSchema() {
         var catalog = withReplacement("schema.json", "{}");
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("schema.json requires a 2020-12 object schema");
     }
 
@@ -209,7 +209,7 @@ class ProblemCatalogTest {
                     }
                     """.formatted(server.getAddress().getPort()));
 
-            assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+            assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("schema.json/cases/items", "Invalid scalar schema");
             assertThat(calls.get()).isZero();
         } finally {
@@ -237,10 +237,10 @@ class ProblemCatalogTest {
                          "assertions":[{"id":"boundary-mapping","op":"mapEquals"}]}
                         """));
 
-        var pack = catalog.loadPublished("002");
+        var pack = catalog.loadVersion("002", 1);
 
         assertThat(pack.problem().path("slots").propertyNames()).containsExactly("system");
-        assertThat(pack.publicCase().path("variables").propertyNames())
+        assertThat(pack.cases().getFirst().variables().propertyNames())
                 .containsExactlyInAnyOrder("persona", "question");
     }
 
@@ -264,7 +264,7 @@ class ProblemCatalogTest {
                         {"caseId":"case-1","inputLocale":"zh-CN","variables":%s}
                         """.formatted(variables)));
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Case variables", "requirement", "context");
     }
 
@@ -285,7 +285,7 @@ class ProblemCatalogTest {
                 {"user":{"requiredVariables":["requirement"]}}
                 """, messages));
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining(error);
     }
 
@@ -294,8 +294,24 @@ class ProblemCatalogTest {
     void requiresExactlyOneEditableSlot(String slots) {
         var catalog = withReplacement("problem.json", problem(slots, "[]"));
 
-        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(() -> catalog.loadVersion("002", 1)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Expected one editable slot");
+    }
+
+    @Test
+    void preservesManifestOrderAndRequiresDistinctCaseIds() {
+        var published = new ProblemCatalog(new DefaultResourceLoader()).loadPublished("002");
+        assertThat(published.version()).isEqualTo(2);
+        assertThat(published.cases()).extracting(ProblemCatalog.ProblemCase::caseId)
+                .containsExactly("case-1", "case-2");
+        assertThat(published.findCase("case-2").variables().path("requirement").stringValue())
+                .contains("3 至 8", "2、3、4、7、8、9");
+        var duplicate = withReplacement("problem.json", problem(
+                "{\"user\":{\"requiredVariables\":[\"requirement\"]}}",
+                "[{\"role\":\"user\",\"parts\":[{\"type\":\"slot\",\"name\":\"user\"}]}]")
+                .replace("[\"case-1\"]", "[\"case-1\",\"case-1\"]"));
+        assertThatThrownBy(() -> duplicate.loadVersion("002", 1))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("duplicate public case ID");
     }
 
     private static String problem(String slots, String messages) {

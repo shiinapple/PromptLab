@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,9 +49,12 @@ class ProblemCatalogLintTest {
                         .map(SOURCE.resolve(version)::relativize)
                         .map(path -> path.toString().replace(File.separatorChar, '/'))
                         .toList();
-                assertThat(relativeFiles).as("%s supported files", version).containsExactlyInAnyOrder(
-                        "problem.json", "schema.json", "i18n/zh-CN.json", "i18n/en.json",
-                        "cases/" + pack.caseId() + ".json", "fixtures/" + pack.caseId() + ".json");
+                var expectedFiles = new ArrayList<>(List.of("problem.json", "schema.json", "i18n/zh-CN.json", "i18n/en.json"));
+                for (var item : pack.cases()) {
+                    expectedFiles.add("cases/" + item.caseId() + ".json");
+                    expectedFiles.add("fixtures/" + item.caseId() + ".json");
+                }
+                assertThat(relativeFiles).as("%s supported files", version).containsExactlyInAnyOrderElementsOf(expectedFiles);
             }
             checkFixtures(version, pack);
         }
@@ -95,19 +99,19 @@ class ProblemCatalogLintTest {
     private void checkFixtures(String version, ProblemCatalog.ProblemPack pack) {
         boolean passed = false;
         boolean failed = false;
-        for (JsonNode fixture : pack.fixtures()) {
-            String label = version + "/" + pack.caseId() + "/" + fixture.path("id").stringValue();
-            var grade = judge.judge(fixture.path("rawOutput").stringValue(), pack.schema(),
-                    pack.publicCase().path("assertions"));
-            assertThat(grade.verdict()).as("%s verdict", label).isEqualTo(fixture.path("verdict").stringValue());
-            // Only rule checks are listed in failedCheckIds. Format failures have their own verdict.
-            var failures = grade.verdict().equals("WRONG_ANSWER") ? grade.checks().stream()
-                    .filter(check -> "FAIL".equals(check.status())).map(JudgeService.Check::id).toList()
-                    : List.<String>of();
-            assertThat(failures).as("%s failed check IDs", label).containsExactlyInAnyOrderElementsOf(
-                    fixture.path("failedCheckIds").valueStream().map(JsonNode::stringValue).toList());
-            passed |= "PASSED".equals(grade.verdict());
-            failed |= !"PASSED".equals(grade.verdict());
+        for (var item : pack.cases()) {
+            for (JsonNode fixture : item.fixtures()) {
+                String label = version + "/" + item.caseId() + "/" + fixture.path("id").stringValue();
+                var grade = judge.judge(fixture.path("rawOutput").stringValue(), pack.schema(), item.assertions());
+                assertThat(grade.verdict()).as("%s verdict", label).isEqualTo(fixture.path("verdict").stringValue());
+                List<String> failures = "WRONG_ANSWER".equals(grade.verdict()) ? grade.checks().stream()
+                        .filter(check -> "FAIL".equals(check.status())).map(JudgeService.Check::id).toList()
+                        : List.of();
+                assertThat(failures).as("%s failed check IDs", label).containsExactlyInAnyOrderElementsOf(
+                        fixture.path("failedCheckIds").valueStream().map(JsonNode::stringValue).toList());
+                passed |= "PASSED".equals(grade.verdict());
+                failed |= !"PASSED".equals(grade.verdict());
+            }
         }
         assertThat(passed && failed).as("%s must have a passing and a failing fixture", version).isTrue();
     }

@@ -90,7 +90,7 @@ class PracticeIntegrationTest {
         var next = create(UUID.randomUUID().toString(), "另一个 Prompt {{requirement}}");
         assertThat(id(next)).isNotEqualTo(id);
 
-        String raw = " \r\n" + catalog.loadPublished("002").fixtures().path(0).path("rawOutput").stringValue() + "\t\n";
+        String raw = " \r\n" + catalog.loadPublished("002").findCase("case-1").fixtures().path(0).path("rawOutput").stringValue() + "\t\n";
         var result = complete(id, raw);
         assertThat(result.status()).isEqualTo(200);
         assertThat(result.body().path("verdict").stringValue()).isEqualTo("PASSED");
@@ -120,15 +120,16 @@ class PracticeIntegrationTest {
             assertThat(post("/api/runs", intent, UUID.randomUUID().toString(), token).status()).isEqualTo(404);
         }
         var pack = catalog.loadPublished("001");
-        for (var fixture : pack.fixtures()) {
+        for (var fixture : pack.cases().getFirst().fixtures()) {
             var intent = new java.util.HashMap<>(createBody("{{requirement}}"));
             intent.put("problemId", "001");
+            intent.put("version", 1);
             intent.put("slots", Map.of("system", "你是艾琳。"));
             var created = post("/api/runs", intent, UUID.randomUUID().toString(), token);
             assertThat(created.status()).isEqualTo(201);
             assertThat(created.body().at("/messages/0/role").stringValue()).isEqualTo("system");
             assertThat(created.body().at("/messages/0/content").stringValue()).isEqualTo("你是艾琳。");
-            assertThat(created.body().at("/messages/1/content")).isEqualTo(pack.publicCase().at("/variables/question"));
+            assertThat(created.body().at("/messages/1/content")).isEqualTo(pack.cases().getFirst().variables().path("question"));
             var result = complete(id(created), fixture.path("rawOutput").stringValue());
             assertThat(result.body().path("verdict")).as(fixture.path("id").stringValue())
                     .isEqualTo(fixture.path("verdict"));
@@ -159,6 +160,50 @@ class PracticeIntegrationTest {
     }
 
     @Test
+    void createsAndGradesTheRequestedCaseAndKeepsItsSnapshot() throws Exception {
+        var published = get("/api/problems/002").body();
+        assertThat(published.path("version").intValue()).isEqualTo(2);
+        assertThat(published.path("cases")).extracting(item -> item.path("caseId").stringValue())
+                .containsExactly("case-1", "case-2");
+        assertThat(published.toString()).doesNotContain("assertions", "fixtures", "boundary-mapping");
+        var historical = get("/api/problems/002?version=1").body();
+        assertThat(historical.path("version").intValue()).isEqualTo(1);
+        assertThat(historical.path("publishedVersion").intValue()).isEqualTo(2);
+        assertThat(historical.path("cases")).hasSize(1);
+
+        var intent = new java.util.HashMap<>(createBody("{{requirement}}"));
+        intent.put("caseId", "case-2");
+        String key = UUID.randomUUID().toString();
+        var created = post("/api/runs", intent, key, token);
+        assertThat(created.status()).isEqualTo(201);
+        assertThat(created.body().path("caseId").stringValue()).isEqualTo("case-2");
+        assertThat(created.body().at("/messages/0/content")).isEqualTo(published.at("/cases/1/variables/requirement"));
+        var correct = post("/api/runs", intent, UUID.randomUUID().toString(), token);
+        assertThat(correct.status()).isEqualTo(201);
+
+        intent.put("caseId", "case-1");
+        assertThat(post("/api/runs", intent, key, token).body().path("code").stringValue())
+                .isEqualTo("IDEMPOTENCY_CONFLICT");
+        var firstCase = post("/api/runs", intent, UUID.randomUUID().toString(), token);
+        assertThat(firstCase.status()).isEqualTo(201);
+        var pack = catalog.loadPublished("002");
+        String firstAnswer = pack.findCase("case-1").fixtures().get(0).path("rawOutput").stringValue();
+        String secondAnswer = pack.findCase("case-2").fixtures().get(0).path("rawOutput").stringValue();
+        assertThat(complete(id(firstCase), firstAnswer).body().path("verdict").stringValue()).isEqualTo("PASSED");
+        var wrongCase = complete(id(created), firstAnswer).body();
+        assertThat(wrongCase.path("verdict").stringValue()).isEqualTo("WRONG_ANSWER");
+        assertThat(wrongCase.path("caseId").stringValue()).isEqualTo("case-2");
+        assertThat(wrongCase.path("checks")).anySatisfy(check -> {
+            assertThat(check.path("id").stringValue()).isEqualTo("boundary-mapping");
+            assertThat(check.path("status").stringValue()).isEqualTo("FAIL");
+        });
+        assertThat(complete(id(correct), secondAnswer).body().path("verdict").stringValue()).isEqualTo("PASSED");
+        intent.put("caseId", "case-3");
+        assertThat(post("/api/runs", intent, UUID.randomUUID().toString(), token).body().path("code").stringValue())
+                .isEqualTo("INVALID_CASE");
+    }
+
+    @Test
     void usesTheExistingRunContractForDirectMode() throws Exception {
         String key = UUID.randomUUID().toString();
         var direct = new java.util.HashMap<>(createBody("{{requirement}}"));
@@ -175,7 +220,7 @@ class PracticeIntegrationTest {
         direct.put("mode", "PROXY");
         assertThat(post("/api/runs", direct, UUID.randomUUID().toString(), token).body().path("code").stringValue())
                 .isEqualTo("INVALID_MODE");
-        String raw = catalog.loadPublished("002").fixtures().path(0).path("rawOutput").stringValue();
+        String raw = catalog.loadPublished("002").findCase("case-1").fixtures().path(0).path("rawOutput").stringValue();
         assertThat(complete(id(created), raw).body().path("verdict").stringValue()).isEqualTo("PASSED");
     }
 
@@ -284,7 +329,7 @@ class PracticeIntegrationTest {
         var service = new PracticeRuns(jdbc, transactionManager, catalog, judge, "expiry-fixture", clock);
         service.run(null);
         String key = UUID.randomUUID().toString();
-        var intent = new PracticeRuns.Create("002", 1, "case-1", "D0", Map.of("user", "{{requirement}}"));
+        var intent = new PracticeRuns.Create("002", 2, "case-1", "D0", Map.of("user", "{{requirement}}"));
         var created = service.create(key, intent).run();
         long expires = Instant.parse(created.expiresAt()).toEpochMilli();
         clock.now.set(expires - 100);
@@ -333,7 +378,7 @@ class PracticeIntegrationTest {
     }
 
     private static Map<String, Object> createBody(String prompt) {
-        return Map.of("problemId", "002", "version", 1, "caseId", "case-1", "mode", "D0",
+        return Map.of("problemId", "002", "version", 2, "caseId", "case-1", "mode", "D0",
                 "slots", Map.of("user", prompt), "requestParams", Map.of());
     }
 

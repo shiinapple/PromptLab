@@ -17,9 +17,10 @@ import tools.jackson.databind.json.JsonMapper;
 
 class JudgeServiceTest {
     private static final ProblemCatalog.ProblemPack PACK =
-            new ProblemCatalog(new DefaultResourceLoader()).loadPublished("002");
+            new ProblemCatalog(new DefaultResourceLoader()).loadVersion("002", 1);
+    private static final ProblemCatalog.ProblemCase CASE = PACK.cases().getFirst();
     private static final JudgeService JUDGE = new JudgeService();
-    private static final String VALID = PACK.fixtures().path(0).path("rawOutput").stringValue();
+    private static final String VALID = CASE.fixtures().path(0).path("rawOutput").stringValue();
     private static final JsonMapper JSON = JsonMapper.shared();
     private static final JsonNode NO_ASSERTIONS = JSON.readTree("[]");
     private static final JsonNode OPTIONAL_BOOLEAN_SCHEMA = JSON.readTree("""
@@ -43,7 +44,7 @@ class JudgeServiceTest {
     }
 
     static Stream<Arguments> publishedCases() {
-        return StreamSupport.stream(PACK.fixtures().spliterator(), false)
+        return StreamSupport.stream(CASE.fixtures().spliterator(), false)
                 .map(fixture -> Arguments.of(fixture.path("id").stringValue(),
                         fixture.path("rawOutput").stringValue(), fixture.path("verdict").stringValue(),
                         StreamSupport.stream(fixture.path("failedCheckIds").spliterator(), false)
@@ -150,6 +151,6 @@ class JudgeServiceTest {
     }
 
     private static JudgeService.Result check(String raw) {
-        return JUDGE.judge(raw, PACK.schema(), PACK.publicCase().path("assertions"));
+        return JUDGE.judge(raw, PACK.schema(), CASE.assertions());
     }
 }

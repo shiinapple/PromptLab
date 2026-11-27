@@ -7,7 +7,6 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -85,9 +84,10 @@ class PracticeController {
                 "title", text.path("title"), "description", text.path("description"),
                 "defaultSlots", text.path("defaultSlots"), "slots", pack.problem().path("slots"),
                 "messages", pack.problem().path("messages"),
-                "cases", List.of(Map.of("caseId", pack.caseId(), "inputLocale", pack.publicCase().path("inputLocale"),
-                        "variables", pack.publicCase().path("variables"),
-                        "grading", pack.publicCase().path("assertions").isEmpty() ? "STRUCTURE_ONLY" : "RULES"))));
+                "cases", pack.cases().stream().map(item -> Map.of(
+                        "caseId", item.caseId(), "inputLocale", item.definition().path("inputLocale"),
+                        "variables", item.variables(),
+                        "grading", item.assertions().isEmpty() ? "STRUCTURE_ONLY" : "RULES")).toList()));
     }
 
     @PostMapping(path = "/api/runs", consumes = MediaType.APPLICATION_JSON_VALUE)

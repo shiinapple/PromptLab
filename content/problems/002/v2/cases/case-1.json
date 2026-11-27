@@ -1,0 +1,19 @@
+{
+  "caseId": "case-1",
+  "inputLocale": "zh-CN",
+  "variables": {
+    "requirement": "密码长度必须为 6 至 12，包含边界；仅检查长度，不检查字符种类。请覆盖边界前、边界及边界后：5、6、7、11、12、13。"
+  },
+  "assertions": [
+    {"id": "case-count", "op": "arraySize", "path": "/cases", "expected": 6},
+    {"id": "unique-lengths", "op": "uniqueBy", "path": "/cases", "key": "/length"},
+    {
+      "id": "boundary-mapping",
+      "op": "mapEquals",
+      "path": "/cases",
+      "key": "/length",
+      "value": "/expectedValid",
+      "expected": {"5": false, "6": true, "7": true, "11": true, "12": true, "13": false}
+    }
+  ]
+}

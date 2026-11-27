@@ -16,7 +16,7 @@ const {
   direct: { text: directText, stage, seconds, pending, save, stop },
   manual: { raw, confirmed, edit, importFile, grade },
   problems, problem, historical, publicCase, run, runGrading, slot, prompt, restoreTemplate, preview, requestJson, snapshotDraft, mode, loading, settingsOpen,
-  load, selectProblem, setMode, freeze, copyText, download,
+  load, selectProblem, selectCase, setMode, freeze, copyText, download,
 } = usePractice()
 
 const title = computed(() => run.value ? runTitle(run.value, stage.value, !!pending.value, runGrading.value) : '')
@@ -49,7 +49,7 @@ const failed = computed(() => run.value?.status === 'FAILED'
     </nav>
     <div v-if="problem && publicCase" class="workspace">
       <ProblemPanel :problem="problem" :public-case="publicCase" :historical="historical" :loading="loading"
-        @current="selectProblem(problem.problemId)" />
+        @current="selectProblem(problem.problemId)" @select-case="selectCase" />
 
       <div class="activity">
         <PromptPanel v-model="prompt" :role="slot?.role" :preview="preview" :mode="mode" :connection="connection" :busy="busy || loading"
@@ -59,7 +59,7 @@ const failed = computed(() => run.value?.status === 'FAILED'
         <section v-if="run" class="panel" aria-labelledby="run-heading">
           <div class="section-heading">
             <h2 id="run-heading">{{ t('本次运行', 'Current run') }} ·
-              {{ run.mode === 'DIRECT' ? t('直连', 'Direct') : t('手动', 'Manual') }}</h2>
+              {{ run.mode === 'DIRECT' ? t('直连', 'Direct') : t('手动', 'Manual') }} · {{ run.caseId }}</h2>
             <span id="run-status" class="mode" :class="{ passed: run.verdict === 'PASSED', failed }">
               {{ title }}
             </span>

@@ -4,12 +4,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.TreeMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 import org.springframework.core.io.ResourceLoader;
@@ -88,32 +89,38 @@ public class ProblemCatalog {
                         && problem.path("version").canConvertToInt() && version == problem.path("version").intValue(),
                 base + "problem.json ID or version does not match the release");
 
-        JsonNode caseIds = problem.path("caseIds");
-        require(caseIds.isArray() && caseIds.size() == 1, base + "Expected one public case");
-        String caseId = caseIds.path(0).stringValue(null);
-        require(caseId != null && caseId.matches("case-[1-9][0-9]*"), base + "Invalid public case ID");
-        JsonNode publicCase = read(base + "cases/" + caseId + ".json", files);
-        require(caseId.equals(publicCase.path("caseId").stringValue(null))
-                        && LOCALES.contains(publicCase.path("inputLocale").stringValue("")),
-                base + "Invalid public case ID or input locale");
-
         Map<String, JsonNode> translations = Map.of(
                 "zh-CN", read(base + "i18n/zh-CN.json", files),
                 "en", read(base + "i18n/en.json", files));
-        validateTemplates(base, problem, publicCase.path("variables"), translations);
+        Set<String> requiredVariables = validateTemplates(base, problem, translations);
         JsonNode schema = read(base + "schema.json", files);
         require(SCHEMA_DRAFT.equals(schema.path("$schema").stringValue(null))
                         && "object".equals(schema.path("type").stringValue(null)),
                 base + "schema.json requires a 2020-12 object schema");
         validateSchema(schema, base + "schema.json", true);
 
-        JsonNode fixtures = read(base + "fixtures/" + caseId + ".json", files);
-        validateExpectations(base, publicCase.path("assertions"), fixtures);
-        return new ProblemPack(problemId, version, caseId, digest(files), problem, translations, publicCase, schema, fixtures);
+        JsonNode caseIds = problem.path("caseIds");
+        require(caseIds.isArray() && !caseIds.isEmpty(), base + "Expected at least one public case");
+        Set<String> seen = new HashSet<>();
+        List<ProblemCase> cases = new ArrayList<>();
+        for (JsonNode entry : caseIds) {
+            String caseId = entry.stringValue(null);
+            require(caseId != null && caseId.matches("case-[1-9][0-9]*") && seen.add(caseId),
+                    base + "Invalid or duplicate public case ID " + caseId);
+            String path = base + "cases/" + caseId + ".json";
+            JsonNode definition = read(path, files);
+            require(caseId.equals(definition.path("caseId").stringValue(null))
+                            && LOCALES.contains(definition.path("inputLocale").stringValue("")),
+                    path + " Invalid public case ID or input locale");
+            validateCaseVariables(path, definition.path("variables"), requiredVariables);
+            JsonNode fixtures = read(base + "fixtures/" + caseId + ".json", files);
+            validateExpectations(path + " ", definition.path("assertions"), fixtures);
+            cases.add(new ProblemCase(caseId, definition, fixtures));
+        }
+        return new ProblemPack(problemId, version, digest(files), problem, translations, schema, List.copyOf(cases));
     }
 
-    private static void validateTemplates(
-            String base, JsonNode problem, JsonNode variables, Map<String, JsonNode> translations) {
+    private static Set<String> validateTemplates(String base, JsonNode problem, Map<String, JsonNode> translations) {
         JsonNode slots = problem.path("slots");
         require(slots.isObject() && slots.size() == 1, base + "Expected one editable slot");
         String slotName = slots.propertyNames().iterator().next();
@@ -140,12 +147,16 @@ public class ProblemCatalog {
             require(placeholders.equals(required), location + " Variable placeholders do not match " + required);
         }
 
-        Set<String> caseVariables = validateMessages(problem.path("messages"), slotName, base);
-        caseVariables.addAll(required);
-        require(variables.isObject() && new HashSet<>(variables.propertyNames()).equals(caseVariables),
-                base + " Case variables do not match required variables " + caseVariables);
-        for (String variable : caseVariables) {
-            require(nonBlank(variables.path(variable)), base + "Missing case variable " + variable);
+        Set<String> requiredVariables = validateMessages(problem.path("messages"), slotName, base);
+        requiredVariables.addAll(required);
+        return requiredVariables;
+    }
+
+    private static void validateCaseVariables(String path, JsonNode variables, Set<String> requiredVariables) {
+        require(variables.isObject() && new HashSet<>(variables.propertyNames()).equals(requiredVariables),
+                path + " Case variables do not match required variables " + requiredVariables);
+        for (String variable : requiredVariables) {
+            require(nonBlank(variables.path(variable)), path + " Missing case variable " + variable);
         }
     }
 
@@ -294,8 +305,20 @@ public class ProblemCatalog {
     public record PublishedProblem(ProblemPack pack, int publishedVersion) {
     }
 
-    public record ProblemPack(
-            String problemId, int version, String caseId, String contentHash, JsonNode problem, Map<String, JsonNode> translations,
-            JsonNode publicCase, JsonNode schema, JsonNode fixtures) {
+    public record ProblemCase(String caseId, JsonNode definition, JsonNode fixtures) {
+        public JsonNode variables() {
+            return definition.path("variables");
+        }
+
+        public JsonNode assertions() {
+            return definition.path("assertions");
+        }
+    }
+
+    public record ProblemPack(String problemId, int version, String contentHash, JsonNode problem,
+                              Map<String, JsonNode> translations, JsonNode schema, List<ProblemCase> cases) {
+        public ProblemCase findCase(String caseId) {
+            return cases.stream().filter(item -> item.caseId().equals(caseId)).findFirst().orElse(null);
+        }
     }
 }

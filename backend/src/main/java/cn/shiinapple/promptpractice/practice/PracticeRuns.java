@@ -83,8 +83,11 @@ public class PracticeRuns implements ApplicationRunner {
                 String hash = jdbc.sql("SELECT content_hash FROM problem_versions WHERE problem_id = :id AND version = :version")
                         .param("id", pack.problemId()).param("version", pack.version()).query(String.class).single();
                 if (!hash.equals(pack.contentHash())) throw new IllegalStateException("Published problem bytes changed");
-                jdbc.sql("INSERT INTO problem_cases VALUES (:id, :version, :caseId) ON CONFLICT DO NOTHING")
-                        .param("id", pack.problemId()).param("version", pack.version()).param("caseId", pack.caseId()).update();
+                for (var problemCase : pack.cases()) {
+                    jdbc.sql("INSERT INTO problem_cases VALUES (:id, :version, :caseId) ON CONFLICT DO NOTHING")
+                            .param("id", pack.problemId()).param("version", pack.version())
+                            .param("caseId", problemCase.caseId()).update();
+                }
             }
             return null;
         });
@@ -98,11 +101,12 @@ public class PracticeRuns implements ApplicationRunner {
 
         var pack = catalog.loadPublished(intent.problemId());
         if (intent.version() != pack.version()) throw new PracticeError(409, "VERSION_CHANGED");
-        if (!intent.caseId().equals(pack.caseId())) throw new PracticeError(422, "INVALID_CASE");
+        var problemCase = pack.findCase(intent.caseId());
+        if (problemCase == null) throw new PracticeError(422, "INVALID_CASE");
 
         List<MessageAssembler.Message> messages;
         try {
-            messages = MessageAssembler.assemble(pack.problem(), intent.slots(), pack.publicCase().path("variables"));
+            messages = MessageAssembler.assemble(pack.problem(), intent.slots(), problemCase.variables());
         } catch (IllegalArgumentException error) {
             throw new PracticeError(422, "INVALID_SLOT");
         }
@@ -146,11 +150,12 @@ public class PracticeRuns implements ApplicationRunner {
         JudgeService.Result grade = null;
         if ("COMPLETED".equals(intent.status())) {
             var pack = catalog.loadVersion(before.problemId(), before.version());
-            if (!pack.contentHash().equals(before.contentHash()) || !pack.caseId().equals(before.caseId())) {
+            var problemCase = pack.findCase(before.caseId());
+            if (!pack.contentHash().equals(before.contentHash()) || problemCase == null) {
                 throw new IllegalStateException("Run problem snapshot unavailable");
             }
             try {
-                grade = judge.judge(intent.rawOutput(), pack.schema(), pack.publicCase().path("assertions"));
+                grade = judge.judge(intent.rawOutput(), pack.schema(), problemCase.assertions());
             } catch (JudgeService.OutputLimit limit) {
                 throw new PracticeError(413, "PAYLOAD_TOO_LARGE");
             }

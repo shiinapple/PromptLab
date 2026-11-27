@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { once } from 'node:events'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -50,10 +50,47 @@ async function freePort() {
 
 try {
   const apiPort = await freePort()
-  start('java', ['-jar', join(root, 'backend/target/prompt-practice-0.1.0-SNAPSHOT.jar'),
-    '--spring.profiles.active=local-practice', `--server.port=${apiPort}`,
-    `--prompt-practice.database.path=${join(temp, 'practice.sqlite3')}`], { cwd: temp })
-  await until(async () => (await fetch(`http://127.0.0.1:${apiPort}/api/health`)).ok, 'Spring readiness')
+  const api = `http://127.0.0.1:${apiPort}`
+  const database = join(temp, 'practice.sqlite3')
+  function startBackend(jar) {
+    return start('java', ['-jar', jar, '--spring.profiles.active=local-practice', `--server.port=${apiPort}`,
+      `--prompt-practice.database.path=${database}`], { cwd: temp })
+  }
+  const waitForBackend = () => until(async () => (await fetch(`${api}/api/health`)).ok, 'Spring readiness')
+  async function createV1Run(intent, key) {
+    const { token } = await (await fetch(`${api}/api/practice/session`)).json()
+    return fetch(`${api}/api/runs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Practice-CSRF': token, 'Idempotency-Key': key },
+      body: JSON.stringify(intent),
+    })
+  }
+
+  let previousRun
+  const v1Jar = process.env.PROMPTLAB_V1_JAR
+  if (v1Jar) {
+    const previous = startBackend(resolve(v1Jar))
+    await waitForBackend()
+    const { version } = await (await fetch(`${api}/api/problems/002`)).json()
+    assert.equal(version, 1)
+    const body = { problemId: '002', version: 1, caseId: 'case-1', mode: 'D0',
+      slots: { user: '升级前草稿 {{requirement}}' } }
+    const key = randomUUID()
+    const response = await createV1Run(body, key)
+    assert.equal(response.status, 201)
+    previousRun = { key, body, run: await response.json() }
+    const stopped = once(previous, 'exit')
+    previous.kill()
+    await stopped
+  }
+
+  startBackend(join(root, 'backend/target/prompt-practice-0.1.0-SNAPSHOT.jar'))
+  await waitForBackend()
+  if (previousRun) {
+    const replay = await createV1Run(previousRun.body, previousRun.key)
+    assert.equal(replay.status, 200)
+    assert.deepEqual(await replay.json(), previousRun.run)
+    assert.equal((await createV1Run(previousRun.body, randomUUID())).status, 409)
+  }
   const webPort = await freePort()
   const origin = `http://127.0.0.1:${webPort}`
   const frontend = join(root, 'frontend')
@@ -528,38 +565,52 @@ try {
       await send('Fetch.disable')
     }
   }
-  // Simulate a newer published version before M3-05 adds one to the real catalog.
-  const v1 = await (await fetch(`${origin}/api/problems/002?version=1`)).json()
-  const servedVersions = []
-  const simulateRelease = async ({ data }) => {
-    const { method, params } = JSON.parse(data)
-    if (method !== 'Fetch.requestPaused') return
-    const version = new URL(params.request.url).searchParams.get('version')
-    servedVersions.push(version)
-    const problem = version === '1' ? v1 : { ...v1, title: '新版题面', version: 2 }
-    await send('Fetch.fulfillRequest', {
-      requestId: params.requestId, responseCode: 200,
-      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
-      body: Buffer.from(JSON.stringify({ ...problem, publishedVersion: 2 })).toString('base64'),
-    })
-  }
-  socket.addEventListener('message', simulateRelease)
-  await send('Fetch.enable', { patterns: [{ urlPattern: `${origin}/api/problems/002?*` }] })
-  try {
-    await send('Page.navigate', { url: `${origin}/?problem=001&run=${firstRun}` })
-    await waitFor("document.body.textContent.includes('旧版本')", 'restored historical problem')
-    assert.equal(await page("document.querySelector('h1').textContent"), v1.title)
-    assert.equal(await page("document.querySelector('button.primary').disabled"), true)
+  await send('Page.navigate', { url: origin + '/?problem=002' })
+  await waitFor("document.querySelector('.case-text')?.textContent.includes('6 至 12')", 'first 002/v2 case')
+  await clickText('手动运行')
+  const sharedDraft = '两个用例共用 {{requirement}}'
+  await change('#prompt', sharedDraft)
+  await clickText('创建运行')
+  await waitFor("document.querySelector('#run-id')?.textContent.includes('v2 · case-1')", 'case 1 frozen')
+  const case1Run = await page("new URL(location.href).searchParams.get('run')")
+  await clickText('用例 2')
+  assert.equal(await page("document.querySelector('#prompt').value"), sharedDraft)
+  assert.match(await page("document.querySelector('.case-text').textContent"), /3 至 8/)
+  assert.match(await page("document.querySelector('#preview').textContent"), /3 至 8/)
+  assert.match(await page("document.querySelector('#frozen-request').textContent"), /6 至 12/)
+  await paste(fixtures[0].rawOutput)
+  await confirmGrade('通过')
+  assert.match(await page("document.querySelector('#run-heading').textContent"), /case-1/)
+  assert.equal((await (await fetch(`${origin}/api/runs/${case1Run}`)).json()).caseId, 'case-1')
+
+  await clickText('新建运行')
+  await waitFor("document.querySelector('#run-id')?.textContent.includes('v2 · case-2')", 'case 2 frozen')
+  await paste(fixtures[0].rawOutput)
+  await confirmGrade('答案错误')
+  await clickText('新建运行')
+  await waitFor("document.querySelector('#raw') !== null", 'new case 2 run')
+  const case2Fixtures = JSON.parse(await readFile(join(root, 'content/problems/002/v2/fixtures/case-2.json'), 'utf8'))
+  await paste(case2Fixtures[0].rawOutput)
+  await confirmGrade('通过')
+  await send('Page.reload')
+  await waitFor("document.querySelector('.case-text')?.textContent.includes('3 至 8')", 'restored run selects case 2')
+  assert.match(await page("document.querySelector('#run-heading').textContent"), /case-2/)
+  console.log('PASS two cases share a draft, freeze separately, and are graded against their own boundaries')
+
+  if (previousRun) {
+    await send('Page.navigate', { url: `${origin}/?problem=001&run=${previousRun.run.runId}` })
+    await waitFor("document.body.textContent.includes('旧版本')", 'restored 002/v1 problem')
     assert.match(await page("document.querySelector('#run-id').textContent"), /^002 · v1 · case-1/)
+    assert.match(await page("document.querySelector('.case-text').textContent"), /6 至 12/)
+    assert.match(await page("document.querySelector('#frozen-request').textContent"), /升级前草稿/)
+    assert.equal(await page("document.querySelector('button.primary').disabled"), true)
+    await paste(fixtures[0].rawOutput)
+    await confirmGrade('通过')
     await clickText('切回当前版本')
-    await waitFor("document.querySelector('h1')?.textContent === '新版题面'", 'switch to current version')
-    assert.deepEqual(servedVersions, ['1', null])
+    await waitFor("[...document.querySelectorAll('button')].some(button => button.textContent.trim() === '用例 2')", 'switch to the real v2 pack')
     assert.equal(await page('new URL(location.href).searchParams.has("run")'), false)
-  } finally {
-    socket.removeEventListener('message', simulateRelease)
-    await send('Fetch.disable')
+    console.log('PASS v2 starts on the v1 SQLite database and a pending v1 run can be restored, submitted and graded')
   }
-  console.log('PASS historical run reads its exact problem version and can return to the current version')
 
   await checkHttpsMatching(true, origin)
   const fixedPort = await freePort()
