@@ -231,6 +231,18 @@ try {
   await signIn(alice, ACCOUNTS.alice)
   await alice.waitFor("document.querySelector('#prompt')?.value === 'Alice 上下文一的新版本 {{requirement}}'", 'draft after re-login')
 
+  // 偏好设置：保存字号后刷新，输入框与编辑器字号都从服务端恢复。
+  await alice.clickText('偏好设置')
+  await alice.waitFor("document.querySelector('#settings-panel input[type=number]') !== null", 'settings form loaded')
+  await alice.change('#settings-panel input[type=number]', '18')
+  await alice.clickText('保存偏好')
+  await alice.waitFor("document.querySelector('#settings-panel [role=status]')?.textContent.includes('偏好已保存')", 'preferences saved')
+  assert.equal(await alice.page("document.querySelector('#prompt').style.fontSize"), '18px')
+  await alice.go(app)
+  await alice.waitFor("document.querySelector('#prompt')?.style.fontSize === '18px'", 'font size restored after reload')
+  await alice.clickText('偏好设置')
+  await alice.waitFor("document.querySelector('#settings-panel input[type=number]')?.value === '18'", 'saved font size shown after reload')
+
   // 错误密码给出统一提示，不泄露账号是否存在。
   await bob.clickText('退出')
   await bob.waitFor("document.querySelector('#login-heading')?.textContent === '登录'", 'bob logged out')
