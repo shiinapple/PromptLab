@@ -1,5 +1,6 @@
 package cn.shiinapple.promptpractice.practice;
 
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -18,7 +19,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.env.Environment;
-import java.net.InetAddress;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -97,6 +97,11 @@ public class PracticeRuns implements ApplicationRunner {
             if (localOwner != null) {
                 jdbc.sql("INSERT INTO users(id, created_at) VALUES (:owner, :now) ON CONFLICT DO NOTHING")
                         .param("owner", localOwner).param("now", now).update();
+                boolean fixture = jdbc.sql("""
+                        SELECT state = 'DISABLED' AND email_normalized IS NULL AND password_hash IS NULL
+                        FROM users WHERE id = :owner
+                        """).param("owner", localOwner).query(Boolean.class).single();
+                if (!fixture) throw new IllegalStateException("The local subject must be a credential-free fixture");
             }
             var registered = jdbc.sql("SELECT problem_id, version, content_hash FROM problem_versions")
                     .query((row, index) -> new RegisteredVersion(row.getString(1), row.getInt(2), row.getString(3)))

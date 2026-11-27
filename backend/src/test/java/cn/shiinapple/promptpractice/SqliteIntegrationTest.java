@@ -6,6 +6,9 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+
+import cn.shiinapple.promptpractice.auth.Accounts;
 
 import javax.sql.DataSource;
 
@@ -64,6 +67,21 @@ class SqliteIntegrationTest {
                     .query(String.class).single());
             assertEquals(0, jdbc.sql("SELECT revision FROM fixture WHERE id = 1").query(Integer.class).single());
         }
+    }
+
+    @Test
+    void refusesToUseARealAccountAsTheLocalPracticeSubject() {
+        Path file = directory.resolve("account.sqlite3");
+        String id;
+        try (var context = start(file)) {
+            id = context.getBean(Accounts.class).create(UUID.randomUUID() + "@example.test", UUID.randomUUID().toString());
+        }
+        assertThrows(IllegalStateException.class, () -> {
+            try (var ignored = start(file, "--spring.profiles.active=local-practice",
+                    "--prompt-practice.local-subject=" + id)) {
+                // Startup must fail before any request can use the real account as a fixture.
+            }
+        });
     }
 
     @Test

@@ -1,7 +1,6 @@
 package cn.shiinapple.promptpractice.auth;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.Set;
 
 import cn.shiinapple.promptpractice.practice.ApiInput;
@@ -26,15 +25,15 @@ class AuthController {
     }
 
     @GetMapping("/api/auth/csrf")
-    Map<String, String> csrf(HttpServletRequest request) {
-        return Map.of("token", sessions.token(request.getSession()), "headerName", Sessions.HEADER);
+    Csrf csrf(HttpServletRequest request) {
+        return new Csrf(sessions.token(request.getSession()), Sessions.HEADER);
     }
 
     @PostMapping(path = "/api/auth/login", consumes = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<Void> login(HttpServletRequest request) throws IOException {
         var body = ApiInput.read(request, 8192);
         ApiInput.fields(body, Set.of("email", "password"));
-        String email = Accounts.normalizeEmail(ApiInput.string(body.path("email"), 254));
+        String email = Accounts.normalizeEmail(ApiInput.string(body.path("email"), 1024));
         String password = ApiInput.string(body.path("password"), 1024);
         String id = limits.authenticate(accounts, request.getRemoteAddr(), email, password);
         sessions.login(request, id);
@@ -50,5 +49,11 @@ class AuthController {
     @GetMapping("/api/me")
     Accounts.Profile me(HttpServletRequest request) {
         return Sessions.profile(request);
+    }
+    record Csrf(String token, String headerName) {
+        @Override
+        public String toString() {
+            return "Csrf[redacted]";
+        }
     }
 }

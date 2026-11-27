@@ -54,7 +54,7 @@ class BackupFiles {
             inspect(temporary);
             Path saved = root.resolve("prompt-practice-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + ".sqlite3");
             Files.createLink(saved, temporary);
-            prune(root, Instant.now().minus(retention));
+            prune(root, saved, Instant.now().minus(retention));
             return saved;
         } finally {
             Files.deleteIfExists(temporary);
@@ -65,6 +65,9 @@ class BackupFiles {
     static Restored restore(Path backup, Path directory) throws SQLException, IOException {
         Path source = backup.toAbsolutePath().normalize();
         if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Backup file does not exist");
+        if (Files.exists(source.resolveSibling(source.getFileName() + "-wal"), LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("Restore requires a standalone backup");
+        }
         var original = inspect(source);
         Path root = directory.toAbsolutePath().normalize();
         Files.createDirectory(root, privateDirectory());
@@ -74,7 +77,9 @@ class BackupFiles {
             Files.copy(source, target);
             Files.setPosixFilePermissions(target, PosixFilePermissions.fromString("rw-------"));
             var restored = inspect(target);
-            if (!original.equals(restored)) throw new SQLException("Backup and restored database differ");
+            if (!original.equals(restored) || Files.mismatch(source, target) != -1) {
+                throw new SQLException("Backup and restored database differ");
+            }
             verified = true;
             return new Restored(target, restored.rowCounts());
         } finally {
@@ -101,10 +106,10 @@ class BackupFiles {
         return PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------"));
     }
 
-    private static void prune(Path root, Instant threshold) throws IOException {
+    private static void prune(Path root, Path saved, Instant threshold) throws IOException {
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(root)) {
             for (Path entry : entries) {
-                if (GENERATED.matcher(entry.getFileName().toString()).matches()
+                if (!entry.equals(saved) && GENERATED.matcher(entry.getFileName().toString()).matches()
                         && Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)
                         && Files.getLastModifiedTime(entry, LinkOption.NOFOLLOW_LINKS).toInstant().isBefore(threshold)) {
                     Files.deleteIfExists(entry);

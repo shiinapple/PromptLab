@@ -1,9 +1,11 @@
 package cn.shiinapple.promptpractice.auth;
 
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -17,12 +19,14 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 
 import cn.shiinapple.promptpractice.PromptPracticeApplication;
 import cn.shiinapple.promptpractice.judge.JudgeService;
 import cn.shiinapple.promptpractice.maintenance.RunMaintenance;
 import cn.shiinapple.promptpractice.ops.Operations;
+import com.sun.net.httpserver.HttpServer;
 import cn.shiinapple.promptpractice.practice.PracticeError;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -387,6 +391,8 @@ class M4IntegrationTest {
         }
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(backup)));
         Path restore = directory.resolve("isolated restore");
+        assertEquals(1, Operations.restore(new String[]{"restore", directory.resolve("m4.sqlite3").toString(),
+                directory.resolve("must not restore live database").toString()}));
         assertEquals(0, Operations.restore(new String[]{"restore", backup.toString(), restore.toString()}));
         assertEquals(1, Operations.restore(new String[]{"restore", backup.toString(), restore.toString()}));
         try (var context = new SpringApplicationBuilder(PromptPracticeApplication.class).web(WebApplicationType.NONE)
@@ -400,6 +406,41 @@ class M4IntegrationTest {
                     SELECT r.raw_output FROM runs r JOIN submissions a ON r.id = a.run_id AND r.user_id = a.user_id
                     WHERE r.id = ? AND r.user_id = ?
                     """).params(run, user.id).query(String.class).single());
+        }
+    }
+
+    @Test
+    void directMockIsCalledOnceAndNeverAgainForArchiveOrHistory() throws Exception {
+        var session = login(createUser());
+        var calls = new AtomicInteger();
+        var mock = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        mock.createContext("/model", exchange -> {
+            calls.incrementAndGet();
+            byte[] output = "{}".getBytes(StandardCharsets.UTF_8);
+            try (exchange) {
+                exchange.sendResponseHeaders(200, output.length);
+                exchange.getResponseBody().write(output);
+            }
+        });
+        mock.start();
+        try (var client = HttpClient.newHttpClient()) {
+            String run = newRun(session, "DIRECT");
+            var response = client.send(HttpRequest.newBuilder(
+                    URI.create("http://127.0.0.1:" + mock.getAddress().getPort() + "/model"))
+                    .timeout(Duration.ofSeconds(5)).POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode());
+            assertEquals(200, write("POST", "/api/runs/" + run + "/result", session,
+                    Map.of("status", "COMPLETED", "rawOutput", response.body())).status);
+            int beforeArchive = calls.get();
+            assertEquals(1, beforeArchive);
+            assertEquals(201, write("POST", "/api/submissions", session, Map.of("runId", run)).status);
+            assertEquals(200, write("POST", "/api/submissions", session, Map.of("runId", run)).status);
+            assertEquals(200, get("/api/submissions", session).status);
+            assertEquals(200, get("/api/problems/002/runs", session).status);
+            assertEquals(0, calls.get() - beforeArchive);
+        } finally {
+            mock.stop(0);
         }
     }
 
@@ -486,14 +527,29 @@ class M4IntegrationTest {
     }
 
     private record User(String id, String email, String password) {
+        @Override
+        public String toString() {
+            return "User[redacted]";
+        }
+
         Map<String, String> credentials() {
             return Map.of("email", email, "password", password);
         }
     }
 
-    private record Session(String cookie, String token) {}
+    private record Session(String cookie, String token) {
+        @Override
+        public String toString() {
+            return "Session[redacted]";
+        }
+    }
 
     private record Reply(int status, JsonNode body, String setCookie) {
+        @Override
+        public String toString() {
+            return "Reply[status=" + status + "]";
+        }
+
         String cookie() {
             assertTrue(!setCookie.isEmpty(), "Expected session cookie");
             return setCookie.split(";", 2)[0];

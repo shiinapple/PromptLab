@@ -1,6 +1,7 @@
 package cn.shiinapple.promptpractice.ops;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -78,12 +79,17 @@ public class Operations {
             password = System.console().readPassword("Password: ");
             if (password == null) throw new IOException("Missing input");
         } else {
-            byte[] bytes = System.in.readNBytes(1026);
+            byte[] bytes = new byte[1025];
             try {
                 int end = 0;
-                while (end < bytes.length && bytes[end] != '\n') end++;
+                while (end < bytes.length) {
+                    int next = System.in.read();
+                    if (next == '\n' || next == -1) break;
+                    bytes[end++] = (byte) next;
+                }
+                if (end == bytes.length) throw new IOException("Input is too long");
                 if (end > 0 && bytes[end - 1] == '\r') end--;
-                var decoded = StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes, 0, end));
+                var decoded = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes, 0, end));
                 password = new char[decoded.remaining()];
                 decoded.get(password);
                 if (decoded.hasArray()) Arrays.fill(decoded.array(), '\0');
