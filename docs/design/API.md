@@ -30,10 +30,10 @@ M1 到本地 M3 使用显式本地测试主体。M4 生产形态下，除健康�
 ```json
 {
   "problemId": "002",
-  "version": 1,
+  "version": 2,
   "caseId": "case-1",
   "mode": "D0",
-  "slots": {"system": "只输出符合题面约束的 JSON。"},
+  "slots": {"user": "{{requirement}}\n只输出符合题面约束的 JSON。"},
   "requestParams": {}
 }
 ```

@@ -39,15 +39,11 @@ backend/                         # 单 Maven 模块，Maven Wrapper，Java 21
   src/main/resources/db/migration/ # Flyway 增量迁移
   src/test/                       # 单元、HTTP 与真实临时 SQLite 集成测试
 frontend/
-  src/app/                        # 应用入口、路由、i18n
-  src/features/
-    auth/                         # 会话与登录页
-    problems/                     # 题库和题面
-    practice/                     # 编辑、预览、D0 与运行编排
-    history/                      # 运行记录与归档
-    settings/                     # 用户偏好页
-    model/                        # 连接设置、凭据和直连适配器
-  src/shared/                     # 平台 API client、通用显示组件与样式
+  src/app/                        # 应用入口与页面布局
+  src/account/                    # 登录表单
+  src/practice/                   # 题库、编辑、预览、运行编排、历史与平台 API client
+  src/model/                      # 模型设置、浏览器凭据与直连
+  src/styles/                     # Design Token
 content/problems/                 # 版本化题目资源，构建时打包受信发布内容
 deploy/                           # 到部署阶段添加 Nginx、systemd、备份操作文件
 docs/                             # 架构、验证、任务、学习与交付
@@ -58,7 +54,7 @@ poc/                              # 独立实验与证据
 |---|---|---|
 | auth | 用户创建、登录、账号状态、当前主体 | Spring Security、自己的用户数据访问 |
 | problem | 题目资源、版本/用例目录、消息组装 | 受信内容、自己的目录数据访问 |
-| judge | 原文解析、Schema 校验、确定性断言、结构化反馈 | Jackson、验证后的 Schema 库、调用方传入的受信规则；纯计算，无网络与 DB |
+| judge | 原文解析、Schema 校验、确定性断言、结构化反馈 | Jackson、本地 Schema 子集、调用方传入的受信规则；纯计算，无网络与 DB |
 | practice | 草稿、冻结、终态、过期、本人历史、归档 | problem 的版本接口、judge 的判题入口、控制器解析的用户主体、自己的数据访问 |
 | settings | 语言、编辑器偏好 | 当前用户主体、自己的偏好数据访问 |
 | common | 请求 ID、错误格式、时钟或配置等已产生的共用基础设施 | Spring 与标准库 |

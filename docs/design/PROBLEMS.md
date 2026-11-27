@@ -157,8 +157,8 @@ Case 1 固定输入：`外面下了很大的雨，我可以在这里待到天亮
   "required": ["merchant", "receiptNo", "date", "total", "currency"],
   "additionalProperties": false,
   "properties": {
-    "merchant": {"type": "string", "minLength": 1},
-    "receiptNo": {"type": "string", "minLength": 1},
+    "merchant": {"type": "string", "pattern": "\\S"},
+    "receiptNo": {"type": "string", "pattern": "\\S"},
     "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
     "total": {"type": "string", "pattern": "^[0-9]+\\.[0-9]{2}$"},
     "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}

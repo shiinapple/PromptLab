@@ -42,7 +42,7 @@ POC-04 为 M0 提供了 Java 与 SQLite 基线。更换核心依赖时，用临�
 
 | 项 | 本机结果（2026-11-27，分支 `codex/m4`，未推送） |
 |---|---|
-| 后端 `./mvnw -B -ntp clean verify` | 退出 0，125 项通过（见 [M4 报告](personal/reports/m4.md)） |
+| 后端 `./mvnw -B -ntp clean verify` | 退出 0，125 项通过 |
 | 前端类型检查、单测、构建 | `npm run typecheck` 0；`npm test` 43/43；`npm run build` 0 |
 | 既有 M1–M3 Chrome E2E | `npm run test:e2e` 退出 0，13 组 PASS（未设置 `PROMPTLAB_V1_JAR`，未执行旧库升级组） |
 | 多账号浏览器 E2E | `npm run test:accounts` 退出 0：两个预建账号在独立浏览器上下文中互不可见；同一账号两个上下文触发 revision 冲突并可采用服务端版本；退出后会话失效，重新登录后草稿仍在；错误密码返回统一提示 |

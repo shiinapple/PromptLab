@@ -26,5 +26,5 @@
 - 不删除测试、降低断言、忽略错误以获得绿色结果。
 - 记录真实命令、退出码、测试数量、失败与未验证项。PoC 证据不等于生产安全认证。
 - PoC 证据写入对应的 `docs/validation/` 文件，状态同步到 TESTING。实施任务只在对应的 `docs/tasks/M*.md` 更新状态。重大决策由用户确认后登记 DECISIONS。
-- 每次完成项目任务，在 `docs/personal/reports/` 保存一份独立 Markdown 交付报告，并在最终回复附链接。报告列出做了什么、涉及文件、实际验证与结果、结论以及未验证项和下一步。不得将未运行的验证标为通过。
+- 每次完成项目任务，在 `docs/personal/reports/` 下的对应子目录保存一份独立 Markdown 交付报告：里程碑任务放 `milestones/`，PoC 放 `poc/`，文档与项目维护放 `project/`；文件名为 `YYYY-MM-DD-主题.md`（里程碑报告保留任务号，如 `2026-11-27-m4-02-settings-drafts.md`），不放在 `reports/` 根目录，并在最终回复附链接。报告列出做了什么、涉及文件、实际验证与结果、结论以及未验证项和下一步。不得将未运行的验证标为通过。
 - `docs/personal/` 是用户的资料目录，存放交付报告、开发日志和学习笔记。Codex 的内部交接、工作备忘和草稿放在本机 `docs/agent/`，由 Git 忽略。`docs/personal/` 和 `docs/agent/` 都不进 Git，公开文档不链接到它们。项目共用的技术文档按[文档入口](docs/README.md)中的职责归档。

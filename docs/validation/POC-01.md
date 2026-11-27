@@ -14,8 +14,8 @@
 
 | OS/浏览器版本 | 网关/版本 | Origin | CORS/权限 | 列表 | 普通 | SSE | 取消 | CLI | 结论/证据 |
 |---|---|---|---|---|---|---|---|---|---|
-| macOS 26.5.2 arm64 / Chrome Headless 158.0.8127.38 | 本机受控 Mock | `http://127.0.0.1:65183` → `http://127.0.0.1:65184` | PASS，覆盖允许/拒绝预检和实际响应缺 CORS 头；LNA / 混合内容 NOT_RUN | PASS | PASS | PASS | NOT_RUN | 本机浏览器 34/34 |
-| 目标 OS / 浏览器待确认 | CC Switch、Magpie、Ollama、公网兼容网关、官方 Chat Completions API | 真实 HTTPS 测试站待提供 | BLOCKED | BLOCKED | BLOCKED | BLOCKED | NOT_RUN | 缺测试站、目标端点与版本及实际调用授权 |
+| macOS 26.5.2 arm64 / Chrome Headless 158.0.8127.38 | 本机受控 Mock | `http://127.0.0.1:65183` → `http://127.0.0.1:65184` | PASS，覆盖允许/拒绝预检和实际响应缺 CORS 头；LNA / 混合内容 NOT_RUN | PASS | PASS | PASS | PASS | NOT_RUN | 本机浏览器 34/34 |
+| 目标 OS / 浏览器待确认 | CC Switch、Magpie、Ollama、公网兼容网关、官方 Chat Completions API | 真实 HTTPS 测试站待提供 | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | NOT_RUN | 缺测试站、目标端点与版本及实际调用授权 |
 
 ### POC-01 执行记录
 
