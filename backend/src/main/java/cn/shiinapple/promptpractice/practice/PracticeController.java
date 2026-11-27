@@ -105,7 +105,7 @@ class PracticeController {
         if (!Set.of("D0", "DIRECT").contains(mode)) throw new PracticeError(422, "INVALID_MODE");
         if (body.has("requestParams")) fields(body.path("requestParams"), Set.of());
         JsonNode inputSlots = body.path("slots");
-        fields(inputSlots, Set.of("user"));
+        if (!inputSlots.isObject()) throw new PracticeError(400, "INVALID_REQUEST");
         var slots = new TreeMap<String, String>();
         for (var slot : inputSlots.properties()) slots.put(slot.getKey(), string(slot.getValue(), MAX_SLOT_BYTES));
         var created = runs.create(key, new PracticeRuns.Create(id, version.intValue(), caseId, mode, slots));

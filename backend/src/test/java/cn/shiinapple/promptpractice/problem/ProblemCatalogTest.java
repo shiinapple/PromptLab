@@ -13,6 +13,7 @@ import com.sun.net.httpserver.HttpServer;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.DefaultResourceLoader;
@@ -187,6 +188,99 @@ class ProblemCatalogTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void loadsVariablesFromTheSystemSlotAndFixedUserMessage() {
+        var catalog = withReplacements(Map.of(
+                "problem.json", problem("""
+                        {"system":{"requiredVariables":["persona"]}}
+                        """, """
+                        [
+                          {"role":"system","parts":[{"type":"slot","name":"system"}]},
+                          {"role":"user","parts":[{"type":"fixedText","text":"Question: "},
+                                                 {"type":"caseVariable","name":"question"}]}
+                        ]
+                        """),
+                "i18n/en.json", systemTranslation(),
+                "i18n/zh-CN.json", systemTranslation(),
+                "cases/case-1.json", """
+                        {"caseId":"case-1","inputLocale":"zh-CN",
+                         "variables":{"persona":"守夜人","question":"你是谁？"},
+                         "assertions":[{"id":"boundary-mapping","op":"mapEquals"}]}
+                        """));
+
+        var pack = catalog.loadPublished("002");
+
+        assertThat(pack.problem().path("slots").propertyNames()).containsExactly("system");
+        assertThat(pack.publicCase().path("variables").propertyNames())
+                .containsExactlyInAnyOrder("persona", "question");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{\"requirement\":\"input\"}",
+            "{\"context\":\"input\"}",
+            "{\"requirement\":\"input\",\"context\":\"input\",\"extra\":\"input\"}"
+    })
+    void rejectsMissingOrExtraVariablesForSlotAndMessage(String variables) {
+        var catalog = withReplacements(Map.of(
+                "problem.json", problem("""
+                        {"user":{"requiredVariables":["requirement"]}}
+                        """, """
+                        [
+                          {"role":"system","parts":[{"type":"caseVariable","name":"context"}]},
+                          {"role":"user","parts":[{"type":"slot","name":"user"}]}
+                        ]
+                        """),
+                "cases/case-1.json", """
+                        {"caseId":"case-1","inputLocale":"zh-CN","variables":%s}
+                        """.formatted(variables)));
+
+        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Case variables", "requirement", "context");
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', textBlock = """
+            [] | Missing messages
+            [{"role":"tool","parts":[{"type":"slot","name":"user"}]}] | Unknown message role
+            [{"role":"user","parts":[{"type":"text","text":"input"}]}] | Unknown message part type
+            [{"role":"user","parts":[{"type":"slot","name":"system"}]}] | Unknown slot
+            [{"role":"user","parts":[{"type":"fixedText","text":"input"}]}] | Expected exactly one reference to slot user
+            [{"role":"user","parts":[{"type":"slot","name":"user"},{"type":"slot","name":"user"}]}] | Expected exactly one reference to slot user
+            [{"role":"user","parts":[{"type":"fixedText","text":null}]}] | Invalid fixed text
+            [{"role":"user","parts":[{"type":"caseVariable","name":""}]}] | Invalid case variable name
+            [{"role":"user","parts":{}}] | Invalid message parts
+            """)
+    void rejectsInvalidMessagePlans(String messages, String error) {
+        var catalog = withReplacement("problem.json", problem("""
+                {"user":{"requiredVariables":["requirement"]}}
+                """, messages));
+
+        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(error);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"user\":{},\"system\":{}}"})
+    void requiresExactlyOneEditableSlot(String slots) {
+        var catalog = withReplacement("problem.json", problem(slots, "[]"));
+
+        assertThatThrownBy(() -> catalog.loadPublished("002")).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Expected one editable slot");
+    }
+
+    private static String problem(String slots, String messages) {
+        return """
+                {"problemId":"002","version":1,"caseIds":["case-1"],"slots":%s,"messages":%s}
+                """.formatted(slots, messages);
+    }
+
+    private static String systemTranslation() {
+        return """
+                {"title":"Watcher","description":"Describe the watcher","defaultSlots":{"system":"You are {{persona}}."}}
+                """;
     }
 
     private static ProblemCatalog withReplacement(String path, String json) {

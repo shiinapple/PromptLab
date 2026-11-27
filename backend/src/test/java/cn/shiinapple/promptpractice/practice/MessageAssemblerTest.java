@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
+import java.util.HashMap;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -18,7 +18,10 @@ class MessageAssemblerTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("goldens")
     void matchesSharedGolden(String id, JsonNode plan, JsonNode variables, JsonNode test) {
-        Map<String, String> slots = Map.of("user", test.at("/slots/user").stringValue());
+        var slots = new HashMap<String, String>();
+        for (var slot : test.path("slots").properties()) {
+            slots.put(slot.getKey(), slot.getValue().stringValue());
+        }
         if (test.has("error")) {
             assertThatThrownBy(() -> MessageAssembler.assemble(plan, slots, variables))
                     .isInstanceOf(IllegalArgumentException.class).hasMessage(test.path("error").stringValue());
@@ -31,7 +34,9 @@ class MessageAssemblerTest {
 
     static Stream<Arguments> goldens() throws Exception {
         var shared = PracticeRuns.JSON.readTree(Files.readString(Path.of("../content/fixtures/messages.json")));
-        return StreamSupport.stream(shared.path("cases").spliterator(), false)
-                .map(test -> Arguments.of(test.path("id").stringValue(), shared.path("plan"), shared.path("variables"), test));
+        return Stream.of(shared, shared.required("systemSlot"))
+                .flatMap(suite -> StreamSupport.stream(suite.required("cases").spliterator(), false)
+                        .map(test -> Arguments.of(test.path("id").stringValue(),
+                                suite.required("plan"), suite.required("variables"), test)));
     }
 }

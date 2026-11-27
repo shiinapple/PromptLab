@@ -24,6 +24,7 @@ public class ProblemCatalog {
     private static final String ROOT = "classpath:/content/problems/";
     private static final String SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema";
     private static final Set<String> LOCALES = Set.of("zh-CN", "en");
+    private static final Set<String> MESSAGE_ROLES = Set.of("system", "user", "assistant");
     private static final Set<String> ASSERTIONS = Set.of("arraySize", "uniqueBy", "mapEquals");
     private static final Set<String> VERDICTS = Set.of("PASSED", "FORMAT_ERROR", "WRONG_ANSWER");
     private static final Pattern VARIABLE = Pattern.compile("\\{\\{([a-zA-Z][a-zA-Z0-9_]*)}}");
@@ -87,40 +88,70 @@ public class ProblemCatalog {
     private static void validateTemplates(
             String base, JsonNode problem, JsonNode variables, Map<String, JsonNode> translations) {
         JsonNode slots = problem.path("slots");
-        require(slots.isObject() && !slots.isEmpty(), base + "Missing slots");
-        Set<String> slotNames = Set.copyOf(slots.propertyNames());
+        require(slots.isObject() && slots.size() == 1, base + "Expected one editable slot");
+        String slotName = slots.propertyNames().iterator().next();
         for (var translation : translations.entrySet()) {
             JsonNode text = translation.getValue();
             String location = base + "i18n/" + translation.getKey() + ".json";
             require(nonBlank(text.path("title")) && nonBlank(text.path("description")),
                     location + " Missing title or description");
             JsonNode defaults = text.path("defaultSlots");
-            require(defaults.isObject() && Set.copyOf(defaults.propertyNames()).equals(slotNames),
+            require(defaults.isObject() && defaults.size() == 1 && defaults.has(slotName),
                     location + " Default slots must match problem slots");
         }
-        Set<String> caseVariables = new HashSet<>();
-        for (var slot : slots.properties()) {
-            String slotName = slot.getKey();
-            Set<String> required = strings(slot.getValue().path("requiredVariables"),
-                    base + "Invalid requiredVariables for " + slotName);
-            caseVariables.addAll(required);
-            for (var translation : translations.entrySet()) {
-                String location = base + "i18n/" + translation.getKey() + ".json";
-                JsonNode template = translation.getValue().path("defaultSlots").path(slotName);
-                require(nonBlank(template), location + " Missing template for " + slotName);
-                var matcher = VARIABLE.matcher(template.stringValue());
-                Set<String> placeholders = new HashSet<>();
-                while (matcher.find()) {
-                    placeholders.add(matcher.group(1));
-                }
-                require(placeholders.equals(required), location + " Variable placeholders do not match " + required);
+        Set<String> required = strings(slots.path(slotName).path("requiredVariables"),
+                base + "Invalid requiredVariables for " + slotName);
+        for (var translation : translations.entrySet()) {
+            String location = base + "i18n/" + translation.getKey() + ".json";
+            JsonNode template = translation.getValue().path("defaultSlots").path(slotName);
+            require(nonBlank(template), location + " Missing template for " + slotName);
+            var matcher = VARIABLE.matcher(template.stringValue());
+            Set<String> placeholders = new HashSet<>();
+            while (matcher.find()) {
+                placeholders.add(matcher.group(1));
             }
+            require(placeholders.equals(required), location + " Variable placeholders do not match " + required);
         }
+
+        Set<String> caseVariables = validateMessages(problem.path("messages"), slotName, base);
+        caseVariables.addAll(required);
         require(variables.isObject() && new HashSet<>(variables.propertyNames()).equals(caseVariables),
                 base + " Case variables do not match required variables " + caseVariables);
         for (String variable : caseVariables) {
             require(nonBlank(variables.path(variable)), base + "Missing case variable " + variable);
         }
+    }
+
+    private static Set<String> validateMessages(JsonNode messages, String slotName, String base) {
+        require(messages.isArray() && !messages.isEmpty(), base + "Missing messages");
+        Set<String> variables = new HashSet<>();
+        int slotReferences = 0;
+        for (int messageIndex = 0; messageIndex < messages.size(); messageIndex++) {
+            JsonNode message = messages.path(messageIndex);
+            String location = base + "problem.json/messages/" + messageIndex;
+            require(MESSAGE_ROLES.contains(message.path("role").stringValue("")), location + " Unknown message role");
+            JsonNode parts = message.path("parts");
+            require(parts.isArray(), location + " Invalid message parts");
+            for (int partIndex = 0; partIndex < parts.size(); partIndex++) {
+                JsonNode part = parts.path(partIndex);
+                String partLocation = location + "/parts/" + partIndex;
+                switch (part.path("type").stringValue("")) {
+                    case "fixedText" -> require(part.path("text").isString(), partLocation + " Invalid fixed text");
+                    case "caseVariable" -> {
+                        JsonNode name = part.path("name");
+                        require(nonBlank(name), partLocation + " Invalid case variable name");
+                        variables.add(name.stringValue());
+                    }
+                    case "slot" -> {
+                        require(slotName.equals(part.path("name").stringValue(null)), partLocation + " Unknown slot");
+                        slotReferences++;
+                    }
+                    default -> throw new IllegalArgumentException(partLocation + " Unknown message part type");
+                }
+            }
+        }
+        require(slotReferences == 1, base + " Expected exactly one reference to slot " + slotName);
+        return variables;
     }
 
     // Validate the supported schema subset before passing it to the judge.

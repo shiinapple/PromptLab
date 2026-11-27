@@ -82,7 +82,9 @@ class PracticeIntegrationTest {
         assertThat(original.status()).isEqualTo(201);
         String id = id(original);
         assertThat(original.location()).isEqualTo("/api/runs/" + id);
-        assertThat(create(key, "查看：{{requirement}}").status()).isEqualTo(200);
+        var replay = create(key, "查看：{{requirement}}");
+        assertThat(replay.status()).isEqualTo(200);
+        assertThat(replay.body()).isEqualTo(original.body());
         assertThat(create(key, "另一个 Prompt {{requirement}}").body().path("code").stringValue())
                 .isEqualTo("IDEMPOTENCY_CONFLICT");
         var next = create(UUID.randomUUID().toString(), "另一个 Prompt {{requirement}}");
@@ -148,6 +150,34 @@ class PracticeIntegrationTest {
                         () -> new ByteArrayInputStream(bytes))).build();
         assertThat(client.send(chunked, HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(413);
         assertThat(get("/api/runs/" + id).body().path("status").stringValue()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void validatesSlotNamesAgainstThePackAfterCheckingIdempotency() throws Exception {
+        String key = UUID.randomUUID().toString();
+        var template = "{{requirement}}";
+        var intent = new java.util.HashMap<>(createBody(template));
+        intent.put("slots", java.util.List.of(template));
+        var invalidShape = post("/api/runs", intent, key, token);
+        assertThat(invalidShape.status()).isEqualTo(400);
+        assertThat(invalidShape.body().path("code").stringValue()).isEqualTo("INVALID_REQUEST");
+
+        for (var slots : java.util.List.of(Map.<String, String>of(), Map.of("system", template),
+                Map.of("user", template, "system", template))) {
+            intent.put("slots", slots);
+            var invalidSlot = post("/api/runs", intent, key, token);
+            assertThat(invalidSlot.status()).isEqualTo(422);
+            assertThat(invalidSlot.body().path("code").stringValue()).isEqualTo("INVALID_SLOT");
+        }
+
+        var original = create(key, template);
+        assertThat(original.status()).isEqualTo(201);
+        var conflict = post("/api/runs", intent, key, token);
+        assertThat(conflict.status()).isEqualTo(409);
+        assertThat(conflict.body().path("code").stringValue()).isEqualTo("IDEMPOTENCY_CONFLICT");
+        var replay = create(key, template);
+        assertThat(replay.status()).isEqualTo(200);
+        assertThat(replay.body()).isEqualTo(original.body());
     }
 
     @Test

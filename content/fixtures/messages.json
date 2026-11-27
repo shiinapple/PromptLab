@@ -90,5 +90,59 @@
       },
       "error": "EMPTY_SLOT"
     }
-  ]
+  ],
+  "systemSlot": {
+    "plan": {
+      "slots": {
+        "system": {
+          "requiredVariables": []
+        }
+      },
+      "messages": [
+        {
+          "role": "system",
+          "parts": [
+            {
+              "type": "slot",
+              "name": "system"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "fixedText",
+              "text": "旅人问："
+            },
+            {
+              "type": "caseVariable",
+              "name": "question"
+            }
+          ]
+        }
+      ]
+    },
+    "variables": {
+      "question": "今晚的守夜人是谁？"
+    },
+    "cases": [
+      {
+        "id": "system-slot-with-fixed-user-question",
+        "slots": {
+          "system": "你是月港酒馆的守夜人。"
+        },
+        "expected": [
+          {
+            "role": "system",
+            "content": "你是月港酒馆的守夜人。"
+          },
+          {
+            "role": "user",
+            "content": "旅人问：今晚的守夜人是谁？"
+          }
+        ]
+      }
+    ]
+  }
 }
