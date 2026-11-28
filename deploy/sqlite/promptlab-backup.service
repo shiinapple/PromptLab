@@ -1,0 +1,9 @@
+[Unit]
+Description=Create and verify the daily PromptLab SQLite backup
+
+[Service]
+Type=oneshot
+User=promptlab
+EnvironmentFile=/etc/promptlab/runtime.env
+ExecStart=/opt/promptlab/deploy/sqlite/backup.sh ${PROMPTLAB_JAR} ${PROMPT_PRACTICE_DB_PATH} ${PROMPTLAB_BACKUP_DIRECTORY}
+UMask=0077
