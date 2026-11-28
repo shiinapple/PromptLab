@@ -37,7 +37,7 @@ class ApiAccess implements WebMvcConfigurer {
                 }
                 boolean login = "/api/auth/login".equals(path) && "POST".equals(verb);
                 if (!login) sessions.requireActive(request);
-                if (!safe) sessions.verifyCsrf(request);
+                if (!safe || method.getBeanType() == AccountDeletionController.class) sessions.verifyCsrf(request);
                 if ("cross-site".equals(request.getHeader("Sec-Fetch-Site"))) {
                     throw new PracticeError(403, "FORBIDDEN");
                 }

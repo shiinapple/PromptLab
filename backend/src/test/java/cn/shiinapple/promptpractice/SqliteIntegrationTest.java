@@ -37,10 +37,10 @@ class SqliteIntegrationTest {
         Path file = directory.resolve("data with spaces").resolve("baseline.sqlite3");
         try (var context = start(file)) {
             assertTrue(Files.isRegularFile(file));
-            assertEquals("6", version(context));
+            assertEquals("7", version(context));
         }
         try (var context = start(file)) {
-            assertEquals("6", version(context));
+            assertEquals("7", version(context));
             assertEquals(1L, context.getBean(JdbcClient.class)
                     .sql("SELECT count(*) FROM flyway_schema_history WHERE version = '1'")
                     .query(Long.class).single());
@@ -66,6 +66,27 @@ class SqliteIntegrationTest {
             assertEquals("existing row", jdbc.sql("SELECT value FROM fixture WHERE id = 1")
                     .query(String.class).single());
             assertEquals(0, jdbc.sql("SELECT revision FROM fixture WHERE id = 1").query(Integer.class).single());
+        }
+    }
+
+    @Test
+    void addsDeletionRequestsToV6WithoutChangingExistingAccountsOrSettings() {
+        Path file = directory.resolve("account-deletion-upgrade.sqlite3");
+        String userId;
+        try (var context = start(file, "--spring.flyway.target=6")) {
+            assertEquals("6", version(context));
+            userId = context.getBean(Accounts.class).create("upgrade@example.test", UUID.randomUUID().toString());
+            context.getBean(JdbcClient.class).sql("INSERT INTO user_settings VALUES (?, 'en', '{}', 1)")
+                    .param(userId).update();
+        }
+        try (var context = start(file)) {
+            assertEquals("7", version(context));
+            var jdbc = context.getBean(JdbcClient.class);
+            assertEquals("ACTIVE", jdbc.sql("SELECT state FROM users WHERE id = ?").param(userId)
+                    .query(String.class).single());
+            assertEquals("en", jdbc.sql("SELECT locale FROM user_settings WHERE user_id = ?").param(userId)
+                    .query(String.class).single());
+            assertEquals(0, jdbc.sql("SELECT count(*) FROM account_deletion_requests").query(Integer.class).single());
         }
     }
 
