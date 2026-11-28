@@ -75,3 +75,8 @@ export function readArchive(cursor?: string | null) {
 
 export const archiveRun = (runId: string) => post<Submission>('/api/submissions', { runId })
 export const unarchive = (submissionId: string) => send<void>('DELETE', `/api/submissions/${encodeURIComponent(submissionId)}`)
+
+export type DeletionStatus = { status: 'NONE' | 'PENDING'; requestedAt: string | null; effectiveAt: string | null }
+export const readDeletion = () => getJsonPublic<DeletionStatus>('/api/account/deletion')
+export const requestDeletion = () => post<DeletionStatus>('/api/account/deletion', {})
+export const withdrawDeletion = () => send<void>('DELETE', '/api/account/deletion')

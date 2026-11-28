@@ -20,6 +20,7 @@
 | M4 | GET /api/problems/{problemId}/runs | 本人跨版本历史，按时间倒序分页，列表只含摘要。 |
 | M4 | POST /api/submissions；GET /api/submissions | 传 runId 归档已判题运行，201 或幂等 200；分页查看本人归档。 |
 | M4 | DELETE /api/submissions/{submissionId} | 移除本人归档标记，成功 204。 |
+| M6 | 账号删除（D20） | `POST /api/account/deletion` 提交申请，首次 201，已在反悔期内再次提交返回 200（幂等），返回 `{status, requestedAt, effectiveAt}`；`GET /api/account/deletion` 返回当前状态，无申请时 `status: "NONE"`；`DELETE /api/account/deletion` 撤回，成功 204，无待撤回申请返回 409。三者均需会话与 CSRF。`effectiveAt` 为申请时间加 3 天。 |
 
 M1 到本地 M3 使用显式本地测试主体。M4 生产形态下，除健康、获取 CSRF 与登录入口外，业务 API 需要会话。列表规模增长时采用 `limit` 与不透明 `cursor`，返回 `{items, nextCursor}`。游标绑定排序与筛选，读取始终带当前主体。运行详情与列表字段各自白名单，列表不返回模型原文或完整快照。
 

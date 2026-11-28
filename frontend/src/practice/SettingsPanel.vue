@@ -5,6 +5,7 @@ import { checkPrefs, DEFAULT_PREFS, type Locale, type Settings } from './setting
 import { readSettings, saveSettings } from './settingsApi'
 import { t } from '../model/copy'
 import { setLocale } from '../i18n/locale'
+import AccountDeletion from './AccountDeletion.vue'
 
 const emit = defineEmits<{ saved: [settings: Settings]; close: [] }>()
 
@@ -101,5 +102,6 @@ async function save() {
       <p v-if="notice" class="help" role="status">{{ notice }}</p>
       <button type="submit" :disabled="busy">{{ t('保存偏好', 'Save preferences') }}</button>
     </form>
+    <AccountDeletion />
   </section>
 </template>
