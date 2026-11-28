@@ -119,7 +119,17 @@ CREATE TABLE submissions (
     FOREIGN KEY (user_id, run_id) REFERENCES runs (user_id, id) ON DELETE CASCADE
 );
 CREATE INDEX submissions_by_user_time ON submissions (user_id, submitted_at DESC, id DESC);
+
+-- M6（D20）
+CREATE TABLE account_deletion_requests (
+    user_id TEXT NOT NULL PRIMARY KEY REFERENCES users ON DELETE CASCADE,
+    requested_at INTEGER NOT NULL,
+    effective_at INTEGER NOT NULL CHECK (effective_at = requested_at + 259200000)
+);
+CREATE INDEX account_deletion_due ON account_deletion_requests (effective_at);
 ```
+
+说明：撤回即删除该行；到期任务删除 `effective_at <= now` 的 users 行，依赖外键级联删除关联数据。毫秒时间戳，3 天为 259200000。
 
 - 主键/唯一约束承担查 ID 与去重。列表按用户、时间与 ID 使用游标。历史按 user/problem 过滤，经 snapshotId 连接，不在 runs 重复保存题目信息。M4 增加实际历史清理后，按查询计划和实测决定是否需要按 finishedAt 加索引。
 - 持久化 JSON 只用于有界、不按内部字段索引的结构。应用验证结构和各字段白名单，原文 TEXT 保存且不改写。模型连接的 URL、认证头和凭据不进入持久化字段。应用创建 ACTIVE 用户时必须同时写入规范化邮箱和密码哈希，未填身份的本地夹具保持 DISABLED。邮箱规范化及唯一冲突在 M4 测试。
@@ -145,6 +155,6 @@ stateDiagram-v2
 | 过期 | 服务端令超过截止时间的 PENDING 有效状态为 EXPIRED，GET 无需写入。维护任务可小批量 CAS 持久化 EXPIRED，finishedAt 取截止时间。过期永不接受新终态，创建重试只取回旧 run。执行截止时间默认 D0 24 小时、直连 10 分钟。 |
 | 草稿 | 不存在时用 revision 0 创建 revision 1；已有时带精确 revision 条件更新并递增。冲突 409 返回服务器 revision，客户端先保留本地编辑。不同题目版本可并存，复制由用户主动触发。 |
 | 归档 | 单条 `INSERT ... SELECT` 只从本人且 COMPLETED 的 run 插入，runId 唯一，同一 run 的重试读取原归档。归档、删除和留存清理由短写事务序列化；清理删除未归档快照前，在同一写语句或事务重查归档不存在。 |
-| 删除与留存 | 清理以快照为删除入口，级联删除 run；归档移除只取消归档标记，再将 run 纳入未归档留存规则。账户停用并撤销会话后，可由受控运维流程删除账户及其关联数据，未归档的终态运行自 finished_at 起保留 30 天，过期运行的 finished_at 取截止时间。已归档运行和草稿不参加定时清理。独立备份按备份轮换策略保留。 |
+| 删除与留存 | 清理以快照为删除入口，级联删除 run；归档移除只取消归档标记，再将 run 纳入未归档留存规则。用户提交删除申请后进入 3 天反悔期（期间可撤回），反悔期结束后删除账户及其关联数据（见 D20），未归档的终态运行自 finished_at 起保留 30 天，过期运行的 finished_at 取截止时间。已归档运行和草稿不参加定时清理。独立备份按备份轮换策略保留。 |
 
 SQLite busy 超时耗尽时映射为 503，前端可重试同一业务写入意图。客户端运行状态在不确定时先读 run，以免为取回结果重复调用模型。幂等保证限于运行记录存在期间，超过留存窗口不重放原创建请求。

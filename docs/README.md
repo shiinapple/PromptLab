@@ -11,6 +11,7 @@
 | 看已发现的问题 | [问题清单](issues/README.md) |
 | 查已定事项 | [决策记录](DECISIONS.md) |
 | 看测试范围和待验项 | [TESTING](TESTING.md) · [PoC 证据](validation/) |
+| 并行开发、切换分支、清理工作树 | [Git 分支与工作树](guides/GIT_WORKTREE.md) |
 
 ## 按主题查
 
@@ -23,6 +24,7 @@
 | 模型接入与安全 | [模型接入](design/MODEL_INTEGRATION.md) | [直连](validation/POC-01.md) · [凭据与 CSP](validation/POC-02.md) |
 | 手动运行（D0） | [模型接入](design/MODEL_INTEGRATION.md) | [命令行指南](guides/D0_CLI.md) · [D0 验证](validation/POC-06.md) |
 | 参考与复用 | [来源](design/REFERENCES.md) | |
+| 协作与 Git | | [Git 分支与工作树](guides/GIT_WORKTREE.md) |
 
 ## 放什么、放哪里
 

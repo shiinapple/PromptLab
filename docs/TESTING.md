@@ -40,7 +40,7 @@ POC-04 为 M0 提供了 Java 与 SQLite 基线。更换核心依赖时，用临�
 
 ## M4 本地验收（账号、会话与数据生命周期）
 
-| 项 | 本机结果（2026-11-27，分支 `codex/m4`，未推送） |
+| 项 | 本机结果（2026-11-27，分支 `codex/m4`；已推送，经 PR #1 合入 `master`） |
 |---|---|
 | 后端 `./mvnw -B -ntp clean verify` | 退出 0，125 项通过 |
 | 前端类型检查、单测、构建 | `npm run typecheck` 0；`npm test` 43/43；`npm run build` 0 |
