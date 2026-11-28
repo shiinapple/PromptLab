@@ -121,6 +121,14 @@ class AccountDeletionIntegrationTest {
             String otherRun = populate(http, unaffected);
             at(REQUESTED).request(withdrawn.id);
             at(REQUESTED).request(due.user.id);
+            String runPath = "/api/runs/" + run;
+            assertEquals(200, send(http, "GET", runPath, due, null).status);
+            var foreignRun = send(http, "GET", runPath, unaffected, null);
+            assertEquals(404, foreignRun.status);
+            assertEquals("RESOURCE_NOT_FOUND", foreignRun.body.path("code").asText());
+            var foreignArchive = send(http, "POST", "/api/submissions", unaffected, Map.of("runId", run));
+            assertEquals(404, foreignArchive.status);
+            assertEquals("RESOURCE_NOT_FOUND", foreignArchive.body.path("code").asText());
             var withinGrace = at(REQUESTED.plus(Duration.ofHours(71)));
             withinGrace.withdraw(withdrawn.id);
             assertEquals(0, withinGrace.deleteDue());
@@ -139,7 +147,7 @@ class AccountDeletionIntegrationTest {
             var anonymous = csrf(http, null);
             assertEquals(401, send(http, "POST", "/api/auth/login", anonymous.cookie, anonymous.csrf,
                     due.user.credentials()).status);
-            assertEquals(404, send(http, "GET", "/api/runs/" + run, unaffected, null).status);
+            assertEquals(404, send(http, "GET", runPath, unaffected, null).status);
             assertEquals(200, send(http, "GET", "/api/runs/" + otherRun, unaffected, null).status);
             for (String table : OWNED.subList(1, OWNED.size())) assertEquals(1, count(table, unaffected.user.id), table);
             assertTrue(accounts.active(withdrawn.id).isPresent());
